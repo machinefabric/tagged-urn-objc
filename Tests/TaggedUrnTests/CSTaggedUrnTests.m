@@ -227,33 +227,33 @@
     XCTAssertTrue(moreSpecific); // 3 > 2
 }
 
-- (void)testCompatibility {
+- (void)testDirectionalAccepts {
     NSError *error;
-    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
-    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:op=generate;format=*" error:&error];
+    // General pattern accepts specific instance
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"cap:op=generate" error:&error];
+    XCTAssertNotNil(general);
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
+    XCTAssertNotNil(specific);
+
+    BOOL result = [general accepts:specific error:&error];
+    XCTAssertNil(error);
+    XCTAssertTrue(result); // General pattern accepts specific instance
+
+    // Specific does NOT accept general (missing ext in general)
+    result = [specific accepts:general error:&error];
+    XCTAssertNil(error);
+    XCTAssertFalse(result); // Specific pattern requires ext=pdf, general doesn't have it
+
+    // Different values never accept each other
     CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op=extract;ext=pdf" error:&error];
-
-    BOOL compatible = [urn1 isCompatibleWith:urn2 error:&error];
+    XCTAssertNotNil(urn3);
+    result = [specific accepts:urn3 error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(compatible);
+    XCTAssertFalse(result); // op mismatch
 
-    compatible = [urn2 isCompatibleWith:urn1 error:&error];
+    result = [urn3 accepts:specific error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(compatible);
-
-    compatible = [urn1 isCompatibleWith:urn3 error:&error];
-    XCTAssertNil(error);
-    XCTAssertFalse(compatible);
-
-    // Missing tags are treated as wildcards for compatibility
-    CSTaggedUrn *urn4 = [CSTaggedUrn fromString:@"cap:op=generate" error:&error];
-    compatible = [urn1 isCompatibleWith:urn4 error:&error];
-    XCTAssertNil(error);
-    XCTAssertTrue(compatible);
-
-    compatible = [urn4 isCompatibleWith:urn1 error:&error];
-    XCTAssertNil(error);
-    XCTAssertTrue(compatible);
+    XCTAssertFalse(result); // op mismatch
 }
 
 - (void)testConvenienceMethods {
@@ -782,7 +782,7 @@
     XCTAssertNotNil(error);
 
     error = nil;
-    [urn1 isCompatibleWith:urn2 error:&error];
+    [urn1 accepts:urn2 error:&error];
     XCTAssertNotNil(error);
 
     error = nil;
@@ -1155,26 +1155,34 @@
     XCTAssertNotNil(error);
 }
 
-- (void)testValuelessTagCompatibility {
-    // Value-less tags are compatible with any value
+- (void)testValuelessTagDirectionalAccepts {
+    // Value-less tag (wildcard pattern) accepts any value
     NSError *error = nil;
-    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op=generate;ext" error:&error];
-    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
-    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op=generate;ext=docx" error:&error];
+    CSTaggedUrn *pattern = [CSTaggedUrn fromString:@"cap:op=generate;ext" error:&error];
+    XCTAssertNotNil(pattern);
+    CSTaggedUrn *instancePdf = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
+    XCTAssertNotNil(instancePdf);
+    CSTaggedUrn *instanceDocx = [CSTaggedUrn fromString:@"cap:op=generate;ext=docx" error:&error];
+    XCTAssertNotNil(instanceDocx);
 
-    BOOL compatible;
-    compatible = [urn1 isCompatibleWith:urn2 error:&error];
+    BOOL result;
+    // Wildcard pattern accepts specific instances
+    result = [pattern accepts:instancePdf error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(compatible);
+    XCTAssertTrue(result);
 
-    compatible = [urn1 isCompatibleWith:urn3 error:&error];
+    result = [pattern accepts:instanceDocx error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(compatible);
+    XCTAssertTrue(result);
 
-    // But urn2 and urn3 are not compatible (different specific values)
-    compatible = [urn2 isCompatibleWith:urn3 error:&error];
+    // Specific instance does NOT accept different specific instance
+    result = [instancePdf accepts:instanceDocx error:&error];
     XCTAssertNil(error);
-    XCTAssertFalse(compatible);
+    XCTAssertFalse(result); // ext=pdf does not accept ext=docx
+
+    result = [instanceDocx accepts:instancePdf error:&error];
+    XCTAssertNil(error);
+    XCTAssertFalse(result); // ext=docx does not accept ext=pdf
 }
 
 - (void)testValuelessNumericKeyStillRejected {

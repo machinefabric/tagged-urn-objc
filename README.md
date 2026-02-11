@@ -98,10 +98,8 @@ if try urn.conforms(to: pattern) {
 | `-withoutTag:` | Return new URN with tag removed |
 | `-conformsTo:error:` | Check if URN conforms to a pattern |
 | `-accepts:error:` | Check if URN (as pattern) accepts an instance |
-| `-canHandle:error:` | Check if URN can handle a request |
 | `-specificity` | Get graded specificity score |
 | `-isMoreSpecificThan:error:` | Compare specificity with another URN |
-| `-isCompatibleWith:error:` | Check compatibility with another URN |
 | `-toString` | Get canonical string representation |
 
 ### CSTaggedUrnBuilder

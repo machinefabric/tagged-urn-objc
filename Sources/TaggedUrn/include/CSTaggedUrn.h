@@ -143,17 +143,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)isMoreSpecificThan:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
 
 /**
- * Check if this URN is compatible with another
- *
- * IMPORTANT: Both URNs must have the same prefix.
- *
- * @param other The other URN to check compatibility with
- * @param error Error if prefixes don't match
- * @return YES if the URNs are compatible
- */
-- (BOOL)isCompatibleWith:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
-
-/**
  * Create a new URN with a specific tag set to wildcard
  * @param key The tag key to set to wildcard
  * @return A new CSTaggedUrn instance with the tag set to wildcard
