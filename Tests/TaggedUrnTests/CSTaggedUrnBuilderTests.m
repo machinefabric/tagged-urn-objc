@@ -252,4 +252,45 @@
     XCTAssertEqual([wildcardPattern specificity], 8); // 2 exact × 3 + 1 * × 2 = 6 + 2 = 8
 }
 
+// TEST596: Builder with prefix verification
+- (void)test596_builderWithPrefix {
+    NSError *error = nil;
+    CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"custom"];
+    [builder tag:@"key" value:@"value"];
+    CSTaggedUrn *urn = [builder build:&error];
+
+    XCTAssertNotNil(urn);
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(urn.prefix, @"custom");
+}
+
+// TEST597: Builder case preservation for quoted values
+- (void)test597_builderPreservesCase {
+    NSError *error = nil;
+    CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
+    [builder tag:@"name" value:@"MyValue"];
+    CSTaggedUrn *urn = [builder build:&error];
+
+    XCTAssertNotNil(urn);
+    XCTAssertNil(error);
+    XCTAssertEqualObjects([urn getTag:@"name"], @"MyValue");
+    // Should be quoted to preserve case
+    XCTAssertTrue([[urn toString] containsString:@"\"MyValue\""]);
+}
+
+// TEST598: Builder rejects empty tag values (matches Rust's Result error)
+- (void)test598_builderRejectsEmptyValue {
+    NSError *error = nil;
+    CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
+    [builder tag:@"key" value:@""]; // This sets buildError internally
+    CSTaggedUrn *urn = [builder build:&error];
+
+    // Should fail with error - matches Rust: TaggedUrnBuilder::new("cap").tag("key", "") returns Err
+    XCTAssertNil(urn);
+    XCTAssertNotNil(error);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorEmptyTag);
+    XCTAssertTrue([error.localizedDescription containsString:@"Empty value"]);
+    XCTAssertTrue([error.localizedDescription containsString:@"use '*' for wildcard"]);
+}
+
 @end

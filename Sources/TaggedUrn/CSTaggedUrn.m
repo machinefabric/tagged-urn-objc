@@ -517,6 +517,58 @@ typedef NS_ENUM(NSInteger, CSParseState) {
                                          error:error];
 }
 
+- (BOOL)isEquivalentTo:(CSTaggedUrn *)other error:(NSError **)error {
+    if (!other) {
+        if (error) {
+            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                         code:CSTaggedUrnErrorInvalidFormat
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot compare with nil URN"}];
+        }
+        return NO;
+    }
+
+    NSError *err1 = nil, *err2 = nil;
+    BOOL forward = [self accepts:other error:&err1];
+    if (err1) {
+        if (error) *error = err1;
+        return NO;
+    }
+
+    BOOL reverse = [other accepts:self error:&err2];
+    if (err2) {
+        if (error) *error = err2;
+        return NO;
+    }
+
+    return forward && reverse;
+}
+
+- (BOOL)isComparableTo:(CSTaggedUrn *)other error:(NSError **)error {
+    if (!other) {
+        if (error) {
+            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                         code:CSTaggedUrnErrorInvalidFormat
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot compare with nil URN"}];
+        }
+        return NO;
+    }
+
+    NSError *err1 = nil, *err2 = nil;
+    BOOL forward = [self accepts:other error:&err1];
+    if (err1) {
+        if (error) *error = err1;
+        return NO;
+    }
+
+    BOOL reverse = [other accepts:self error:&err2];
+    if (err2) {
+        if (error) *error = err2;
+        return NO;
+    }
+
+    return forward || reverse;
+}
+
 /// Core matching: does instance satisfy pattern's constraints?
 + (BOOL)checkMatchInstanceTags:(NSDictionary<NSString *, NSString *> *)instanceTags
                 instancePrefix:(NSString *)instancePrefix
@@ -742,6 +794,7 @@ typedef NS_ENUM(NSInteger, CSParseState) {
 @interface CSTaggedUrnBuilder ()
 @property (nonatomic, strong) NSString *builderPrefix;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *tags;
+@property (nonatomic, strong) NSError *buildError; // Track errors from tag()
 @end
 
 @implementation CSTaggedUrnBuilder
@@ -761,12 +814,28 @@ typedef NS_ENUM(NSInteger, CSParseState) {
 }
 
 - (CSTaggedUrnBuilder *)tag:(NSString *)key value:(NSString *)value {
+    // Validate empty value - matches Rust's Result error
+    if (value.length == 0) {
+        self.buildError = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                               code:CSTaggedUrnErrorEmptyTag
+                                           userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Empty value for key '%@' (use '*' for wildcard)", key]}];
+        return self; // Return self to maintain fluent API, but build() will fail
+    }
+
     // Key lowercase, value preserved
     self.tags[[key lowercaseString]] = value;
     return self;
 }
 
 - (nullable CSTaggedUrn *)build:(NSError **)error {
+    // Check if tag() encountered an error
+    if (self.buildError) {
+        if (error) {
+            *error = self.buildError;
+        }
+        return nil;
+    }
+
     if (self.tags.count == 0) {
         if (error) {
             *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain

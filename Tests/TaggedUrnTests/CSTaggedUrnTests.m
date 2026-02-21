@@ -1198,4 +1198,171 @@
     XCTAssertNotNil(error);
 }
 
+#pragma mark - Order-Theoretic Relations Tests
+
+// TEST578: Equivalent URNs with identical tag sets
+- (void)test578_equivalentIdenticalTags {
+    NSError *error = nil;
+    CSTaggedUrn *a = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
+    XCTAssertNotNil(a);
+    CSTaggedUrn *b = [CSTaggedUrn fromString:@"cap:ext=pdf;op=generate" error:&error]; // same tags, different order
+    XCTAssertNotNil(b);
+
+    XCTAssertTrue([a isEquivalentTo:b error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([b isEquivalentTo:a error:&error]); // symmetric
+    XCTAssertNil(error);
+}
+
+// TEST579: Non-equivalent URNs where one is more specific
+- (void)test579_notEquivalentWhenOneMoreSpecific {
+    NSError *error = nil;
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    XCTAssertNotNil(general);
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    XCTAssertNotNil(specific);
+
+    XCTAssertFalse([general isEquivalentTo:specific error:&error]);
+    XCTAssertNil(error);
+    XCTAssertFalse([specific isEquivalentTo:general error:&error]);
+    XCTAssertNil(error);
+}
+
+// TEST580: Comparable URNs on the same specialization chain
+- (void)test580_comparableSpecializationChain {
+    NSError *error = nil;
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    XCTAssertNotNil(general);
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    XCTAssertNotNil(specific);
+
+    // general.accepts(specific) = true (bytes ⊆ pdf;bytes)
+    // specific.accepts(general) = false (pdf missing from general)
+    // OR → true
+    XCTAssertTrue([general isComparableTo:specific error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([specific isComparableTo:general error:&error]); // symmetric
+    XCTAssertNil(error);
+}
+
+// TEST581: Incomparable URNs in different branches of the lattice
+- (void)test581_incomparableDifferentBranches {
+    NSError *error = nil;
+    CSTaggedUrn *pdf = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    XCTAssertNotNil(pdf);
+    CSTaggedUrn *txt = [CSTaggedUrn fromString:@"media:txt;textable" error:&error];
+    XCTAssertNotNil(txt);
+
+    // pdf.accepts(txt) = false (pdf missing from txt)
+    // txt.accepts(pdf) = false (txt missing from pdf)
+    // OR → false
+    XCTAssertFalse([pdf isComparableTo:txt error:&error]);
+    XCTAssertNil(error);
+    XCTAssertFalse([txt isComparableTo:pdf error:&error]);
+    XCTAssertNil(error);
+}
+
+// TEST582: Equivalent implies comparable but not vice versa
+- (void)test582_equivalentImpliesComparable {
+    NSError *error = nil;
+    CSTaggedUrn *a = [CSTaggedUrn fromString:@"cap:op=test;ext=pdf" error:&error];
+    XCTAssertNotNil(a);
+    CSTaggedUrn *b = [CSTaggedUrn fromString:@"cap:op=test;ext=pdf" error:&error];
+    XCTAssertNotNil(b);
+
+    // equivalent → comparable (AND implies OR)
+    XCTAssertTrue([a isEquivalentTo:b error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([a isComparableTo:b error:&error]);
+    XCTAssertNil(error);
+
+    // comparable but NOT equivalent
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"cap:op=test" error:&error];
+    XCTAssertNotNil(general);
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"cap:op=test;ext=pdf" error:&error];
+    XCTAssertNotNil(specific);
+
+    XCTAssertFalse([general isEquivalentTo:specific error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([general isComparableTo:specific error:&error]);
+    XCTAssertNil(error);
+}
+
+// TEST583: Prefix mismatch returns error for both relations
+- (void)test583_prefixMismatchErrors {
+    NSError *error = nil;
+    CSTaggedUrn *cap = [CSTaggedUrn fromString:@"cap:op=test" error:&error];
+    XCTAssertNotNil(cap);
+    CSTaggedUrn *media = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    XCTAssertNotNil(media);
+
+    error = nil;
+    [cap isEquivalentTo:media error:&error];
+    XCTAssertNotNil(error);
+
+    error = nil;
+    [cap isComparableTo:media error:&error];
+    XCTAssertNotNil(error);
+}
+
+// TEST584: Empty tag set is comparable to everything with same prefix
+- (void)test584_emptyTagsComparableToAll {
+    NSError *error = nil;
+    CSTaggedUrn *empty = [CSTaggedUrn fromString:@"media:" error:&error];
+    XCTAssertNotNil(empty);
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes;thumbnail" error:&error];
+    XCTAssertNotNil(specific);
+
+    // empty.accepts(specific) = true (empty has no constraints)
+    XCTAssertTrue([empty isComparableTo:specific error:&error]);
+    XCTAssertNil(error);
+    // but NOT equivalent (specific has tags empty doesn't)
+    XCTAssertFalse([empty isEquivalentTo:specific error:&error]);
+    XCTAssertNil(error);
+    // empty is equivalent to itself
+    CSTaggedUrn *empty2 = [CSTaggedUrn fromString:@"media:" error:&error];
+    XCTAssertNotNil(empty2);
+    XCTAssertTrue([empty isEquivalentTo:empty2 error:&error]);
+    XCTAssertNil(error);
+}
+
+// TEST586: Special values (*, !, ?) with isEquivalent and isComparable
+- (void)test586_specialValues {
+    NSError *error = nil;
+    CSTaggedUrn *mustHave = [CSTaggedUrn fromString:@"cap:ext" error:&error]; // ext=*
+    XCTAssertNotNil(mustHave);
+    CSTaggedUrn *exact = [CSTaggedUrn fromString:@"cap:ext=pdf" error:&error]; // ext=pdf
+    XCTAssertNotNil(exact);
+    CSTaggedUrn *mustNot = [CSTaggedUrn fromString:@"cap:ext=!" error:&error]; // ext=!
+    XCTAssertNotNil(mustNot);
+    CSTaggedUrn *unspecified = [CSTaggedUrn fromString:@"cap:ext=?" error:&error]; // ext=?
+    XCTAssertNotNil(unspecified);
+
+    // must_have (*) and exact (pdf): equivalent — * accepts any value
+    XCTAssertTrue([mustHave isEquivalentTo:exact error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([mustHave isComparableTo:exact error:&error]);
+    XCTAssertNil(error);
+
+    // must_not (!) and exact (pdf): incomparable (conflict both directions)
+    XCTAssertFalse([mustNot isComparableTo:exact error:&error]);
+    XCTAssertNil(error);
+    XCTAssertFalse([mustNot isEquivalentTo:exact error:&error]);
+    XCTAssertNil(error);
+
+    // must_not (!) and must_have (*): incomparable (conflict both directions)
+    XCTAssertFalse([mustNot isComparableTo:mustHave error:&error]);
+    XCTAssertNil(error);
+    XCTAssertFalse([mustNot isEquivalentTo:mustHave error:&error]);
+    XCTAssertNil(error);
+
+    // unspecified (?) is equivalent to everything — ? matches anything
+    XCTAssertTrue([unspecified isEquivalentTo:exact error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([unspecified isEquivalentTo:mustHave error:&error]);
+    XCTAssertNil(error);
+    XCTAssertTrue([unspecified isEquivalentTo:mustNot error:&error]);
+    XCTAssertNil(error);
+}
+
 @end

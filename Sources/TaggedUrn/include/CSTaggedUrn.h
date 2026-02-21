@@ -113,6 +113,42 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)accepts:(CSTaggedUrn * _Nonnull)instance error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ * Check if two URNs are equivalent (identical tag sets).
+ *
+ * From order theory: in the specialization partial order defined by
+ * accepts/conformsTo, two elements are equivalent when each accepts
+ * the other (antisymmetry: a ≤ b ∧ b ≤ a → a = b).
+ *
+ * This is stricter than isComparable — it requires the tag sets to
+ * be identical, not just related by specialization.
+ *
+ * isEquivalent(other) ≡ accepts(other) && other.accepts(self)
+ *
+ * @param other The other URN to compare
+ * @param error Error if prefixes don't match
+ * @return YES if the URNs have identical tag sets
+ */
+- (BOOL)isEquivalentTo:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
+
+/**
+ * Check if two URNs are comparable (one is a specialization of the other).
+ *
+ * From order theory: in a partial order, two elements are comparable
+ * when one is ≤ the other. Elements that are NOT comparable are in
+ * different branches of the specialization lattice.
+ *
+ * This is the weakest relation: it finds all URNs on the same
+ * generalization/specialization chain.
+ *
+ * isComparable(other) ≡ accepts(other) || other.accepts(self)
+ *
+ * @param other The other URN to compare
+ * @param error Error if prefixes don't match
+ * @return YES if the URNs are on the same specialization chain
+ */
+- (BOOL)isComparableTo:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
+
+/**
  * Get the specificity score for URN matching
  * Graded scoring:
  * - K=v (exact value): 3 points (most specific)
