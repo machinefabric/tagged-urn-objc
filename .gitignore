@@ -51,3 +51,4 @@ fastlane/screenshots
 .vscode/
 .ws/
 *.log
+diffs/
