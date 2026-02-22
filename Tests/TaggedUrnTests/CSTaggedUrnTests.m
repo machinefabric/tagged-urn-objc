@@ -1217,9 +1217,9 @@
 // TEST579: Non-equivalent URNs where one is more specific
 - (void)test579_notEquivalentWhenOneMoreSpecific {
     NSError *error = nil;
-    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:" error:&error];
     XCTAssertNotNil(general);
-    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf" error:&error];
     XCTAssertNotNil(specific);
 
     XCTAssertFalse([general isEquivalentTo:specific error:&error]);
@@ -1231,12 +1231,12 @@
 // TEST580: Comparable URNs on the same specialization chain
 - (void)test580_comparableSpecializationChain {
     NSError *error = nil;
-    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    CSTaggedUrn *general = [CSTaggedUrn fromString:@"media:" error:&error];
     XCTAssertNotNil(general);
-    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf" error:&error];
     XCTAssertNotNil(specific);
 
-    // general.accepts(specific) = true (bytes ⊆ pdf;bytes)
+    // general.accepts(specific) = true (wildcard ⊆ pdf)
     // specific.accepts(general) = false (pdf missing from general)
     // OR → true
     XCTAssertTrue([general isComparableTo:specific error:&error]);
@@ -1248,7 +1248,7 @@
 // TEST581: Incomparable URNs in different branches of the lattice
 - (void)test581_incomparableDifferentBranches {
     NSError *error = nil;
-    CSTaggedUrn *pdf = [CSTaggedUrn fromString:@"media:pdf;bytes" error:&error];
+    CSTaggedUrn *pdf = [CSTaggedUrn fromString:@"media:pdf" error:&error];
     XCTAssertNotNil(pdf);
     CSTaggedUrn *txt = [CSTaggedUrn fromString:@"media:txt;textable" error:&error];
     XCTAssertNotNil(txt);
@@ -1293,7 +1293,7 @@
     NSError *error = nil;
     CSTaggedUrn *cap = [CSTaggedUrn fromString:@"cap:op=test" error:&error];
     XCTAssertNotNil(cap);
-    CSTaggedUrn *media = [CSTaggedUrn fromString:@"media:bytes" error:&error];
+    CSTaggedUrn *media = [CSTaggedUrn fromString:@"media:" error:&error];
     XCTAssertNotNil(media);
 
     error = nil;
@@ -1310,7 +1310,7 @@
     NSError *error = nil;
     CSTaggedUrn *empty = [CSTaggedUrn fromString:@"media:" error:&error];
     XCTAssertNotNil(empty);
-    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;bytes;thumbnail" error:&error];
+    CSTaggedUrn *specific = [CSTaggedUrn fromString:@"media:pdf;thumbnail" error:&error];
     XCTAssertNotNil(specific);
 
     // empty.accepts(specific) = true (empty has no constraints)
