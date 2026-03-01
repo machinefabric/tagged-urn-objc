@@ -20,7 +20,7 @@ Objective-C implementation of Tagged URN with strict validation, pattern matchin
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/filegrind/tagged-urn-objc.git", from: "1.0.0")
+    .package(url: "https://github.com/machinefabric/tagged-urn-objc.git", from: "1.0.0")
 ]
 ```
 
@@ -154,8 +154,8 @@ swift test
 ## Cross-Language Compatibility
 
 This Objective-C implementation produces identical results to:
-- [Rust implementation](https://github.com/filegrind/tagged-urn-rs)
-- [Go implementation](https://github.com/filegrind/tagged-urn-go)
-- [JavaScript implementation](https://github.com/filegrind/tagged-urn-js)
+- [Rust implementation](https://github.com/machinefabric/tagged-urn-rs)
+- [Go implementation](https://github.com/machinefabric/tagged-urn-go)
+- [JavaScript implementation](https://github.com/machinefabric/tagged-urn-js)
 
-All implementations pass the same test cases and follow identical rules. See [Tagged URN RULES.md](https://github.com/filegrind/tagged-urn-rs/blob/main/docs/RULES.md) for the complete specification.
+All implementations pass the same test cases and follow identical rules. See [Tagged URN RULES.md](https://github.com/machinefabric/tagged-urn-rs/blob/main/docs/RULES.md) for the complete specification.
