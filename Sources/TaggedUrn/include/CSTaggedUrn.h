@@ -23,7 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
  * A tagged URN using flat, ordered tags with a configurable prefix
  *
  * Examples:
- *   cap:op=generate;ext=pdf;output=binary;target=thumbnail
+ *   cap:generate;ext=pdf;output=binary;target=thumbnail
  *   cap:format=*;debug=!  (format required, debug forbidden)
  *   myapp:key="Value With Spaces"
  */
@@ -37,7 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  * Create a tagged URN from a string
- * @param string The tagged URN string (e.g., "cap:op=generate")
+ * @param string The tagged URN string (e.g., "cap:generate")
  * @param error Error if the string format is invalid
  * @return A new CSTaggedUrn instance or nil if invalid
  */

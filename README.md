@@ -37,10 +37,10 @@ Add the `Sources/TaggedUrn` directory to your Xcode project.
 
 // Parse a URN
 NSError *error = nil;
-CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:op=generate;ext=pdf" error:&error];
+CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];
 if (urn) {
     NSLog(@"Operation: %@", [urn getTag:@"op"]);  // "generate"
-    NSLog(@"Canonical: %@", [urn toString]);       // "cap:ext=pdf;op=generate"
+    NSLog(@"Canonical: %@", [urn toString]);       // "cap:ext=pdf;generate"
 }
 
 // Build a URN
@@ -50,7 +50,7 @@ CSTaggedUrn *built = [[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
     build:&error];
 
 // Check matching
-CSTaggedUrn *pattern = [CSTaggedUrn fromString:@"cap:op=generate" error:&error];
+CSTaggedUrn *pattern = [CSTaggedUrn fromString:@"cap:generate" error:&error];
 if ([urn conformsTo:pattern error:&error]) {
     NSLog(@"URN conforms to pattern");
 }
@@ -63,9 +63,9 @@ import TaggedUrn
 
 // Parse a URN
 do {
-    let urn = try CSTaggedUrn.fromString("cap:op=generate;ext=pdf")
+    let urn = try CSTaggedUrn.fromString("cap:generate;ext=pdf")
     print("Operation: \(urn.getTag("op") ?? "nil")")  // "generate"
-    print("Canonical: \(urn.toString())")              // "cap:ext=pdf;op=generate"
+    print("Canonical: \(urn.toString())")              // "cap:ext=pdf;generate"
 } catch {
     print("Parse error: \(error)")
 }
@@ -77,7 +77,7 @@ let built = try CSTaggedUrnBuilder.builder(withPrefix: "cap")
     .build()
 
 // Check matching
-let pattern = try CSTaggedUrn.fromString("cap:op=generate")
+let pattern = try CSTaggedUrn.fromString("cap:generate")
 if try urn.conforms(to: pattern) {
     print("URN conforms to pattern")
 }

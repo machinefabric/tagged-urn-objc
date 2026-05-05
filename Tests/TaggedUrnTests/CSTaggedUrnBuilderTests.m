@@ -25,7 +25,7 @@
     XCTAssertNil(error);
     // Alphabetical order: format, op, type
     // tag:@"type" value:@"data_processing" creates type=data_processing, not valueless
-    XCTAssertEqualObjects([taggedUrn toString], @"cap:format=json;op=transform;type=data_processing");
+    XCTAssertEqualObjects([taggedUrn toString], @"cap:format=json;transform;type=data_processing");
 }
 
 - (void)testBuilderFluentAPI {
@@ -145,7 +145,7 @@
 
     // Alphabetical order: codec, format, framerate, op, output, quality, target, type
     // tag:@"type" value:@"media" creates type=media, not valueless
-    NSString *expected = @"cap:codec=h264;format=mp4;framerate=30fps;op=transcode;output=binary;quality=1080p;target=video;type=media";
+    NSString *expected = @"cap:codec=h264;format=mp4;framerate=30fps;transcode;output=binary;quality=1080p;target=video;type=media";
     XCTAssertEqualObjects([urn toString], expected);
 
     XCTAssertEqualObjects([urn getTag:@"type"], @"media");
@@ -173,7 +173,7 @@
     XCTAssertNil(error);
 
     // Alphabetical order: ext, op, quality (wildcards serialize as value-less)
-    XCTAssertEqualObjects([urn toString], @"cap:ext;op=convert;quality");
+    XCTAssertEqualObjects([urn toString], @"cap:ext;convert;quality");
     // NEW GRADED SPECIFICITY:
     // op=convert (exact) = 3, ext=* = 2, quality=* = 2
     // Total = 3 + 2 + 2 = 7
