@@ -17,21 +17,20 @@
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
     [builder tag:@"type" value:@"data_processing"];
-    [builder tag:@"op" value:@"transform"];
+    [builder marker:@"transform"];
     [builder tag:@"format" value:@"json"];
     CSTaggedUrn *taggedUrn = [builder build:&error];
 
     XCTAssertNotNil(taggedUrn);
     XCTAssertNil(error);
-    // Alphabetical order: format, op, type
-    // tag:@"type" value:@"data_processing" creates type=data_processing, not valueless
+    // Alphabetical order: format, transform (marker), type
     XCTAssertEqualObjects([taggedUrn toString], @"cap:format=json;transform;type=data_processing");
 }
 
 - (void)testBuilderFluentAPI {
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder tag:@"op" value:@"generate"];
+    [builder marker:@"generate"];
     [builder tag:@"target" value:@"thumbnail"];
     [builder tag:@"format" value:@"pdf"];
     [builder tag:@"output" value:@"binary"];
@@ -44,14 +43,13 @@
     XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
     XCTAssertEqualObjects([urn getTag:@"format"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
 }
 
 - (void)testBuilderJSONOutput {
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
     [builder tag:@"type" value:@"api"];
-    [builder tag:@"op" value:@"process"];
+    [builder marker:@"process"];
     [builder tag:@"target" value:@"data"];
     [builder tag:@"output" value:@"json"];
     CSTaggedUrn *urn = [builder build:&error];
@@ -68,7 +66,7 @@
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
     [builder tag:@"engine" value:@"v2"];
     [builder tag:@"quality" value:@"high"];
-    [builder tag:@"op" value:@"compress"];
+    [builder marker:@"compress"];
     CSTaggedUrn *urn = [builder build:&error];
 
     XCTAssertNotNil(urn);
@@ -82,7 +80,7 @@
 - (void)testBuilderTagOverrides {
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder tag:@"op" value:@"convert"];
+    [builder marker:@"convert"];
     [builder tag:@"format" value:@"jpg"];
     CSTaggedUrn *urn = [builder build:&error];
 
@@ -131,7 +129,7 @@
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
     [builder tag:@"type" value:@"media"];
-    [builder tag:@"op" value:@"transcode"];
+    [builder marker:@"transcode"];
     [builder tag:@"target" value:@"video"];
     [builder tag:@"format" value:@"mp4"];
     [builder tag:@"codec" value:@"h264"];
@@ -143,9 +141,8 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    // Alphabetical order: codec, format, framerate, op, output, quality, target, type
-    // tag:@"type" value:@"media" creates type=media, not valueless
-    NSString *expected = @"cap:codec=h264;format=mp4;framerate=30fps;transcode;output=binary;quality=1080p;target=video;type=media";
+    // Alphabetical order: codec, format, framerate, output, quality, target, transcode (marker), type
+    NSString *expected = @"cap:codec=h264;format=mp4;framerate=30fps;output=binary;quality=1080p;target=video;transcode;type=media";
     XCTAssertEqualObjects([urn toString], expected);
 
     XCTAssertEqualObjects([urn getTag:@"type"], @"media");
@@ -157,30 +154,29 @@
     XCTAssertEqualObjects([urn getTag:@"framerate"], @"30fps");
     XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
 
-    // NEW GRADED SPECIFICITY: 8 exact values × 3 points each = 24
-    XCTAssertEqual([urn specificity], 24);
+    // GRADED SPECIFICITY: 7 exact-valued tags × 3 + 1 marker (transcode) × 2 = 21 + 2 = 23
+    XCTAssertEqual([urn specificity], 23);
 }
 
 - (void)testBuilderWildcards {
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder tag:@"op" value:@"convert"];
-    [builder tag:@"ext" value:@"*"]; // Wildcard format
-    [builder tag:@"quality" value:@"*"]; // Wildcard quality
+    [builder marker:@"convert"];
+    [builder marker:@"ext"];
+    [builder marker:@"quality"];
     CSTaggedUrn *urn = [builder build:&error];
 
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    // Alphabetical order: ext, op, quality (wildcards serialize as value-less)
-    XCTAssertEqualObjects([urn toString], @"cap:ext;convert;quality");
-    // NEW GRADED SPECIFICITY:
-    // convert (exact) = 3, ext=* = 2, quality=* = 2
-    // Total = 3 + 2 + 2 = 7
-    XCTAssertEqual([urn specificity], 7);
+    // Three markers serialize as value-less, sorted alphabetically.
+    XCTAssertEqualObjects([urn toString], @"cap:convert;ext;quality");
+    // GRADED SPECIFICITY: 3 markers × 2 points each = 6
+    XCTAssertEqual([urn specificity], 6);
 
-    XCTAssertEqualObjects([urn getTag:@"ext"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"quality"], @"*");
+    XCTAssertTrue([urn hasMarkerTag:@"convert"]);
+    XCTAssertTrue([urn hasMarkerTag:@"ext"]);
+    XCTAssertTrue([urn hasMarkerTag:@"quality"]);
 }
 
 - (void)testBuilderStaticFactory {
@@ -209,19 +205,19 @@
 
     // Create a specific instance
     CSTaggedUrnBuilder *builder1 = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder1 tag:@"op" value:@"generate"];
+    [builder1 marker:@"generate"];
     [builder1 tag:@"target" value:@"thumbnail"];
     [builder1 tag:@"format" value:@"pdf"];
     CSTaggedUrn *specificInstance = [builder1 build:&error];
 
     // Create a more general pattern (fewer constraints)
     CSTaggedUrnBuilder *builder2 = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder2 tag:@"op" value:@"generate"];
+    [builder2 marker:@"generate"];
     CSTaggedUrn *generalPattern = [builder2 build:&error];
 
     // Create a pattern with wildcard (ext=* means must-have-any)
     CSTaggedUrnBuilder *builder3 = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder3 tag:@"op" value:@"generate"];
+    [builder3 marker:@"generate"];
     [builder3 tag:@"target" value:@"thumbnail"];
     [builder3 tag:@"ext" value:@"*"];
     CSTaggedUrn *wildcardPattern = [builder3 build:&error];
@@ -235,21 +231,24 @@
     XCTAssertNil(error);
     XCTAssertTrue(matches);
 
-    // NEW SEMANTICS: wildcardPattern has ext=* which means instance MUST have ext
-    // specificInstance doesn't have ext, so this should NOT match
+    // wildcardPattern requires ext=* (must-have-any). specificInstance has
+    // no `ext` tag, so it does NOT conform.
     matches = [specificInstance conformsTo:wildcardPattern error:&error];
     XCTAssertNil(error);
-    XCTAssertFalse(matches); // Instance missing ext, pattern requires ext to be present
+    XCTAssertFalse(matches);
 
     // Check specificity
     BOOL moreSpecific = [specificInstance isMoreSpecificThan:generalPattern error:&error];
     XCTAssertNil(error);
     XCTAssertTrue(moreSpecific);
 
-    // NEW GRADED SPECIFICITY: exact value = 3 points, * = 2 points
-    XCTAssertEqual([specificInstance specificity], 9); // 3 exact values × 3 = 9
-    XCTAssertEqual([generalPattern specificity], 3); // 1 exact value × 3 = 3
-    XCTAssertEqual([wildcardPattern specificity], 8); // 2 exact × 3 + 1 * × 2 = 6 + 2 = 8
+    // GRADED SPECIFICITY:
+    //   specificInstance:  generate marker (2) + target=thumbnail (3) + format=pdf (3) = 8
+    //   generalPattern:    generate marker (2) = 2
+    //   wildcardPattern:   generate marker (2) + target=thumbnail (3) + ext=* (2) = 7
+    XCTAssertEqual([specificInstance specificity], 8);
+    XCTAssertEqual([generalPattern specificity], 2);
+    XCTAssertEqual([wildcardPattern specificity], 7);
 }
 
 // TEST596: Builder with prefix verification

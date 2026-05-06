@@ -208,19 +208,19 @@
 }
 
 - (void)testSpecificity {
-    // NEW GRADED SPECIFICITY:
+    // GRADED SPECIFICITY:
     // K=v (exact value): 3 points
-    // K=* (must-have-any): 2 points
+    // K=* (must-have-any / marker): 2 points
     // K=! (must-not-have): 1 point
     // K=? (unspecified): 0 points
     NSError *error;
-    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op" error:&error]; // * = 2
-    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate" error:&error]; // exact = 3
-    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op;ext=pdf" error:&error]; // * + exact = 2 + 3 = 5
+    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op" error:&error];          // 1 marker
+    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:ext=pdf" error:&error];     // 1 exact
+    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op;ext=pdf" error:&error];  // 1 marker + 1 exact
 
-    XCTAssertEqual([urn1 specificity], 2); // * = 2
-    XCTAssertEqual([urn2 specificity], 3); // exact = 3
-    XCTAssertEqual([urn3 specificity], 5); // * + exact = 2 + 3 = 5
+    XCTAssertEqual([urn1 specificity], 2); // marker = 2
+    XCTAssertEqual([urn2 specificity], 3); // exact  = 3
+    XCTAssertEqual([urn3 specificity], 5); // marker + exact = 2 + 3 = 5
 
     BOOL moreSpecific = [urn2 isMoreSpecificThan:urn1 error:&error];
     XCTAssertNil(error);
@@ -271,7 +271,7 @@
 - (void)testBuilder {
     NSError *error;
     CSTaggedUrnBuilder *builder = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
-    [builder tag:@"op" value:@"generate"];
+    [builder marker:@"generate"];
     [builder tag:@"target" value:@"thumbnail"];
     [builder tag:@"ext" value:@"pdf"];
     [builder tag:@"output" value:@"binary"];
@@ -560,7 +560,7 @@
 - (void)testUnquotedValuesLowercased {
     NSError *error = nil;
     // Unquoted values are normalized to lowercase
-    CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:ext=pdf;generate;in=media:;out=media:;target=thumbnail;" error:&error];
+    CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:ext=pdf;generate;target=thumbnail;" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
@@ -569,12 +569,12 @@
     XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
 
-    // Key lookup is case-insensitive
-    XCTAssertEqualObjects([urn getTag:@"OP"], @"generate");
-    XCTAssertEqualObjects([urn getTag:@"Op"], @"generate");
+    // Key lookup is case-insensitive (uppercase variants of an existing key resolve correctly).
+    XCTAssertEqualObjects([urn getTag:@"EXT"], @"pdf");
+    XCTAssertEqualObjects([urn getTag:@"Ext"], @"pdf");
 
-    // Both URNs parse to same lowercase values
-    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate;ext=pdf;target=thumbnail;" error:&error];
+    // The same URN written with different case parses to the same canonical form.
+    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:Ext=PDF;Generate;Target=Thumbnail;" error:&error];
     XCTAssertEqualObjects([urn toString], [urn2 toString]);
     XCTAssertEqualObjects(urn, urn2);
 }
