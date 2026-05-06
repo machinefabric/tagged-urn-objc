@@ -39,13 +39,13 @@ Add the `Sources/TaggedUrn` directory to your Xcode project.
 NSError *error = nil;
 CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];
 if (urn) {
-    NSLog(@"Operation: %@", [urn getTag:@"op"]);  // "generate"
-    NSLog(@"Canonical: %@", [urn toString]);       // "cap:ext=pdf;generate"
+    NSLog(@"Has generate marker: %@", [urn hasMarkerTag:@"generate"] ? @"YES" : @"NO");
+    NSLog(@"Canonical: %@", [urn toString]);  // "cap:ext=pdf;generate"
 }
 
 // Build a URN
-CSTaggedUrn *built = [[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
-    tag:@"op" value:@"extract"]
+CSTaggedUrn *built = [[[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
+    soloTag:@"extract"]
     tag:@"format" value:@"pdf"]
     build:&error];
 

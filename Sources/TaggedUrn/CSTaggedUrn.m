@@ -421,6 +421,11 @@ typedef NS_ENUM(NSInteger, CSParseState) {
     return tagValue && [tagValue isEqualToString:value];
 }
 
+- (BOOL)hasMarkerTag:(NSString *)tagName {
+    NSString *tagValue = self.mutableTags[[tagName lowercaseString]];
+    return tagValue && [tagValue isEqualToString:@"*"];
+}
+
 - (CSTaggedUrn *)withTag:(NSString *)key value:(NSString *)value {
     NSMutableDictionary *newTags = [self.mutableTags mutableCopy];
     // Key lowercase, value preserved
@@ -824,6 +829,13 @@ typedef NS_ENUM(NSInteger, CSParseState) {
 
     // Key lowercase, value preserved
     self.tags[[key lowercaseString]] = value;
+    return self;
+}
+
+- (CSTaggedUrnBuilder *)marker:(NSString *)key {
+    // Marker = wildcard-valued tag, stored as key="*", serialized as just
+    // the key.
+    self.tags[[key lowercaseString]] = @"*";
     return self;
 }
 

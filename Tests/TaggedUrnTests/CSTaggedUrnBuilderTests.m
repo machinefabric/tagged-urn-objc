@@ -40,7 +40,7 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
     XCTAssertEqualObjects([urn getTag:@"format"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
@@ -76,7 +76,7 @@
 
     XCTAssertEqualObjects([urn getTag:@"engine"], @"v2");
     XCTAssertEqualObjects([urn getTag:@"quality"], @"high");
-    XCTAssertEqualObjects([urn getTag:@"op"], @"compress");
+    XCTAssertTrue([urn hasMarkerTag:@"compress"]);
 }
 
 - (void)testBuilderTagOverrides {
@@ -89,7 +89,7 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    XCTAssertEqualObjects([urn getTag:@"op"], @"convert");
+    XCTAssertTrue([urn hasMarkerTag:@"convert"]);
     XCTAssertEqualObjects([urn getTag:@"format"], @"jpg");
 }
 
@@ -149,7 +149,7 @@
     XCTAssertEqualObjects([urn toString], expected);
 
     XCTAssertEqualObjects([urn getTag:@"type"], @"media");
-    XCTAssertEqualObjects([urn getTag:@"op"], @"transcode");
+    XCTAssertTrue([urn hasMarkerTag:@"transcode"]);
     XCTAssertEqualObjects([urn getTag:@"target"], @"video");
     XCTAssertEqualObjects([urn getTag:@"format"], @"mp4");
     XCTAssertEqualObjects([urn getTag:@"codec"], @"h264");
@@ -175,7 +175,7 @@
     // Alphabetical order: ext, op, quality (wildcards serialize as value-less)
     XCTAssertEqualObjects([urn toString], @"cap:ext;convert;quality");
     // NEW GRADED SPECIFICITY:
-    // op=convert (exact) = 3, ext=* = 2, quality=* = 2
+    // convert (exact) = 3, ext=* = 2, quality=* = 2
     // Total = 3 + 2 + 2 = 7
     XCTAssertEqual([urn specificity], 7);
 

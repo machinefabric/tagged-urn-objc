@@ -75,6 +75,17 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)hasTag:(NSString * _Nonnull)key withValue:(NSString * _Nonnull)value;
 
 /**
+ * Check whether a marker tag (a tag whose value is "*") is present at the
+ * given key. Equivalent to `[self hasTag:tagName withValue:@"*"]` but
+ * expresses authorial intent: this tag is present as a marker (a
+ * wildcard-valued tag that serializes as just the key), not as a key=value
+ * pair. Example: `cap:constrained;...` has marker tag "constrained".
+ * @param tagName The marker key
+ * @return YES if the tag exists with value "*"
+ */
+- (BOOL)hasMarkerTag:(NSString * _Nonnull)tagName;
+
+/**
  * Create a new tagged URN with an added or updated tag
  * @param key The tag key
  * @param value The tag value
@@ -265,6 +276,15 @@ typedef NS_ERROR_ENUM(CSTaggedUrnErrorDomain, CSTaggedUrnError) {
  * @return This builder instance for chaining
  */
 - (CSTaggedUrnBuilder * _Nonnull)tag:(NSString * _Nonnull)key value:(NSString * _Nonnull)value;
+
+/**
+ * Add a marker tag (a wildcard-valued tag that serializes as just the key).
+ * Equivalent to [self tag:key value:@"*"] but expresses authorial intent:
+ * this tag is present as a marker, not a key=value pair.
+ * @param key The marker key
+ * @return This builder instance for chaining
+ */
+- (CSTaggedUrnBuilder * _Nonnull)marker:(NSString * _Nonnull)key;
 
 /**
  * Build the final TaggedUrn

@@ -23,7 +23,7 @@
     XCTAssertEqualObjects(taggedUrn.prefix, @"cap");
     // data_processing is a valueless tag, stored as * (must-have-any)
     XCTAssertEqualObjects([taggedUrn getTag:@"data_processing"], @"*");
-    XCTAssertEqualObjects([taggedUrn getTag:@"op"], @"transform");
+    XCTAssertTrue([taggedUrn hasMarkerTag:@"transform"]);
     XCTAssertEqualObjects([taggedUrn getTag:@"format"], @"json");
 }
 
@@ -34,7 +34,7 @@
     XCTAssertNil(error);
 
     XCTAssertEqualObjects(urn.prefix, @"myapp");
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn toString], @"myapp:ext=pdf;generate");
 }
 
@@ -85,7 +85,7 @@
     taggedUrn = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];
     XCTAssertNotNil(taggedUrn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([taggedUrn getTag:@"op"], @"generate");
+    XCTAssertTrue([taggedUrn hasMarkerTag:@"generate"]);
 }
 
 - (void)testTrailingSemicolonEquivalence {
@@ -214,9 +214,9 @@
     // K=! (must-not-have): 1 point
     // K=? (unspecified): 0 points
     NSError *error;
-    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op=*" error:&error]; // * = 2
+    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:op" error:&error]; // * = 2
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate" error:&error]; // exact = 3
-    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op=*;ext=pdf" error:&error]; // * + exact = 2 + 3 = 5
+    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:op;ext=pdf" error:&error]; // * + exact = 2 + 3 = 5
 
     XCTAssertEqual([urn1 specificity], 2); // * = 2
     XCTAssertEqual([urn2 specificity], 3); // exact = 3
@@ -260,7 +260,7 @@
     NSError *error;
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext=pdf;output=binary;target=thumbnail" error:&error];
 
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
     XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
@@ -280,7 +280,7 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
 }
 
@@ -560,12 +560,12 @@
 - (void)testUnquotedValuesLowercased {
     NSError *error = nil;
     // Unquoted values are normalized to lowercase
-    CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:OP=Generate;EXT=PDF;Target=Thumbnail;" error:&error];
+    CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:ext=pdf;generate;in=media:;out=media:;target=thumbnail;" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
     // Keys are always lowercase
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
 
@@ -816,7 +816,7 @@
 
 - (void)testMatchingSemantics_Test2_InstanceMissingTag {
     // Test 2: Instance missing tag
-    // Instance: cap:op=generate
+    // Instance: cap:generate;in=media:;out=media:
     // Pattern:  cap:generate;ext=pdf
     // Result:   NO MATCH (pattern requires ext=pdf, instance doesn't have ext)
     //
@@ -955,7 +955,7 @@
 
 - (void)testMatchingSemantics_Test9_CrossDimensionConstraints {
     // Test 9: Cross-dimension constraints
-    // Instance: cap:op=generate
+    // Instance: cap:generate;in=media:;out=media:
     // Pattern:  cap:ext=pdf
     // Result:   NO MATCH (pattern requires ext=pdf, instance doesn't have ext)
     //
@@ -1016,7 +1016,7 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;optimize;ext=pdf;secure" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
     XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
     XCTAssertEqualObjects([urn getTag:@"secure"], @"*");
@@ -1030,7 +1030,7 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;optimize" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"op"], @"generate");
+    XCTAssertTrue([urn hasMarkerTag:@"generate"]);
     XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
     XCTAssertEqualObjects([urn toString], @"cap:generate;optimize");
 }
@@ -1105,16 +1105,16 @@
 }
 
 - (void)testValuelessTagSpecificity {
-    // NEW GRADED SPECIFICITY:
-    // K=v (exact): 3, K=* (must-have-any): 2, K=! (must-not): 1, K=? (unspecified): 0
+    // GRADED SPECIFICITY:
+    // K=v (exact): 3, K=* (must-have-any / marker): 2, K=! (must-not): 1, K=? (unspecified): 0
     NSError *error = nil;
-    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:generate" error:&error];
-    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate;optimize" error:&error]; // optimize = *
-    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];
+    CSTaggedUrn *urn1 = [CSTaggedUrn fromString:@"cap:generate" error:&error];          // 1 marker
+    CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate;optimize" error:&error]; // 2 markers
+    CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];  // 1 marker + 1 exact
 
-    XCTAssertEqual([urn1 specificity], 3);  // 1 exact = 3
-    XCTAssertEqual([urn2 specificity], 5);  // 1 exact + 1 * = 3 + 2 = 5
-    XCTAssertEqual([urn3 specificity], 6);  // 2 exact = 3 + 3 = 6
+    XCTAssertEqual([urn1 specificity], 2);  // 1 marker = 2
+    XCTAssertEqual([urn2 specificity], 4);  // 2 markers = 2 + 2 = 4
+    XCTAssertEqual([urn3 specificity], 5);  // 1 marker + 1 exact = 2 + 3 = 5
 }
 
 - (void)testValuelessTagRoundtrip {
