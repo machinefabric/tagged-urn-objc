@@ -13,6 +13,11 @@ let package = Package(
         .library(
             name: "TaggedUrn",
             targets: ["TaggedUrn"]),
+        // The model's Swift API: a program generated from a model that builds on tagged-urn's
+        // names its URN type.
+        .library(
+            name: "TaggedUrnFormal",
+            targets: ["TaggedUrnFormal"]),
     ],
     dependencies: [
         // The runtime the code generated from ../formal runs on, at exactly the lungo release

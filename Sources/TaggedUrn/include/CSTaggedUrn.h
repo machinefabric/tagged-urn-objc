@@ -37,6 +37,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// The tags that define this URN
 @property (nonatomic, readonly) NSDictionary<NSString *, NSString *> *tags;
 
+/// This URN on the proved model's side: a value on lungo's runtime (its C API's
+/// `lungo_value`), owned by this URN and alive as long as it is. A program generated
+/// from a model that builds on tagged-urn's takes it wherever the model has a URN;
+/// clone it (`lungo_value_clone`) to hand one over.
+@property (nonatomic, readonly) const struct lungo_value *formalValue NS_RETURNS_INNER_POINTER;
+
 /**
  * Create a tagged URN from a string
  * @param string The tagged URN string (e.g., "cap:generate")

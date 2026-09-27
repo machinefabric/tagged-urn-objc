@@ -1,5 +1,5 @@
 // swift-tools-version: 5.9
-// version: 1.38.100
+// version: 1.39.143
 import PackageDescription
 
 let package = Package(
@@ -13,6 +13,11 @@ let package = Package(
         .library(
             name: "TaggedUrn",
             targets: ["TaggedUrn"]),
+        // The model's Swift API: a program generated from a model that builds on tagged-urn's
+        // names its URN type.
+        .library(
+            name: "TaggedUrnFormal",
+            targets: ["TaggedUrnFormal"]),
     ],
     dependencies: [
         // The runtime the code generated from ../formal runs on, at exactly the lungo release

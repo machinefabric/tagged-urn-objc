@@ -733,6 +733,10 @@ static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
     lungo_value_free(_formal);
 }
 
+- (const lungo_value *)formalValue {
+    return _formal;
+}
+
 + (instancetype)emptyWithPrefix:(NSString *)prefix {
     return [self fromPrefix:prefix tagsInternal:@{} error:nil];
 }
