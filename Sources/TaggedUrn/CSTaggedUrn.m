@@ -714,61 +714,55 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return CSFormExact;
 }
 
-/// Check if instance value matches pattern constraint, per the
-/// truth table over the six canonical forms (plus Missing). See
-/// capdag/docs/04-PREDICATES.md §2.5 for the cross-product table.
+/// Check if instance value matches pattern constraint.
+///
+/// Every form has ONE meaning — the set of states the key may be in
+/// (absent, or present with some value) — and the same meaning on
+/// either side: the instance satisfies the pattern when every state it
+/// allows, the pattern allows too. This is the rule proved in
+/// tagged-urn's formal/ (tagMatch_iff_allows), which is what makes
+/// refinement transitive and equivalence mean "the same tag set". The
+/// table it replaces gave some forms two meanings (a missing key was
+/// "anything" as a pattern and "absent" as an instance; an
+/// instance-side x or ?x was "whatever the pattern wants"); the change
+/// only removes matches.
 + (BOOL)valuesMatchInst:(NSString *)inst patt:(NSString *)patt {
     NSString *iVal = nil, *pVal = nil;
     CSFormKind iKind = CSClassifyForm(inst, &iVal);
     CSFormKind pKind = CSClassifyForm(patt, &pVal);
 
-    // Pattern unconditionally permissive.
+    // A pattern that constrains nothing accepts every instance.
     if (pKind == CSFormMissing || pKind == CSFormNoConstraint) {
         return YES;
     }
 
-    // Instance unconditionally permissive — defers to pattern.
-    if (iKind == CSFormNoConstraint) {
-        return YES;
+    switch (iKind) {
+        case CSFormMissing:
+        case CSFormNoConstraint:
+            // An instance that constrains nothing promises nothing.
+            return NO;
+        case CSFormMustNotHave:
+            return pKind == CSFormMustNotHave || pKind == CSFormAbsentOrNotValue;
+        case CSFormAbsentOrNotValue:
+            return pKind == CSFormAbsentOrNotValue && [iVal isEqualToString:pVal];
+        case CSFormMustHaveAny:
+            // Present with SOME value: not a promise of any particular one.
+            return pKind == CSFormMustHaveAny;
+        case CSFormPresentNotValue:
+            if (pKind == CSFormMustHaveAny) return YES;
+            if (pKind == CSFormPresentNotValue || pKind == CSFormAbsentOrNotValue) {
+                return [iVal isEqualToString:pVal];
+            }
+            return NO;
+        case CSFormExact:
+            if (pKind == CSFormMustHaveAny) return YES;
+            if (pKind == CSFormExact) return [iVal isEqualToString:pVal];
+            if (pKind == CSFormPresentNotValue || pKind == CSFormAbsentOrNotValue) {
+                return ![iVal isEqualToString:pVal];
+            }
+            return NO;
     }
-
-    if (pKind == CSFormMustNotHave) {
-        return iKind == CSFormMissing
-            || iKind == CSFormMustNotHave
-            || iKind == CSFormAbsentOrNotValue;
-    }
-
-    if (pKind == CSFormMustHaveAny) {
-        return !(iKind == CSFormMissing
-              || iKind == CSFormAbsentOrNotValue
-              || iKind == CSFormMustNotHave);
-    }
-
-    if (pKind == CSFormPresentNotValue) {
-        if (iKind == CSFormMissing
-         || iKind == CSFormAbsentOrNotValue
-         || iKind == CSFormMustNotHave) return NO;
-        if (iKind == CSFormMustHaveAny || iKind == CSFormPresentNotValue) return YES;
-        // Exact instance vs pat present-and-not-pVal.
-        return ![iVal isEqualToString:pVal];
-    }
-
-    if (pKind == CSFormAbsentOrNotValue) {
-        if (iKind == CSFormMissing
-         || iKind == CSFormAbsentOrNotValue
-         || iKind == CSFormMustNotHave) return YES;
-        if (iKind == CSFormMustHaveAny || iKind == CSFormPresentNotValue) return YES;
-        // Exact vs pattern's "absent or not pVal".
-        return ![iVal isEqualToString:pVal];
-    }
-
-    // pKind == CSFormExact
-    if (iKind == CSFormMissing
-     || iKind == CSFormAbsentOrNotValue
-     || iKind == CSFormMustNotHave) return NO;
-    if (iKind == CSFormMustHaveAny) return YES;
-    if (iKind == CSFormPresentNotValue) return ![iVal isEqualToString:pVal];
-    return [iVal isEqualToString:pVal];
+    return NO;
 }
 
 /// Check if this URN (instance) satisfies the pattern's constraints.

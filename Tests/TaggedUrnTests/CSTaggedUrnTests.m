@@ -930,10 +930,8 @@
 
 // TEST0067: Matching semantics  test5  urn has wildcard
 - (void)test0067_MatchingSemantics_Test5_UrnHasWildcard {
-    // Test 5: URN has wildcard
-    // URN:     cap:generate;ext=*
-    // Request: cap:generate;ext=pdf
-    // Result:  MATCH (URN handles any ext)
+    // An instance's wildcard promises presence, not the value asked for:
+    // "some ext" does not satisfy ext=pdf, and a pdf satisfies "some ext".
     NSError *error = nil;
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext=*" error:&error];
     XCTAssertNotNil(urn);
@@ -943,7 +941,10 @@
 
     BOOL matches = [urn conformsTo:request error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(matches, @"Test 5: URN wildcard should match");
+    XCTAssertFalse(matches, @"some ext does not satisfy ext=pdf");
+    matches = [request conformsTo:urn error:&error];
+    XCTAssertNil(error);
+    XCTAssertTrue(matches, @"ext=pdf satisfies some ext");
 }
 
 // TEST0068: Matching semantics  test6  value mismatch
@@ -1113,27 +1114,32 @@
 
 // TEST0077: Valueless tag matching
 - (void)test0077_ValuelessTagMatching {
-    // Value-less tag (wildcard) matches any value
+    // A valueless tag promises presence, not a value. Reading `ext` as
+    // "whatever the pattern wants" made `ext` and `ext=pdf` equivalent and
+    // refinement non-transitive; refinement is inclusion of what each form
+    // allows (tagged-urn formal, `tagMatch_iff_allows`).
     NSError *error = nil;
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext" error:&error];
     XCTAssertNotNil(urn);
 
     CSTaggedUrn *requestPdf = [CSTaggedUrn fromString:@"cap:generate;ext=pdf" error:&error];
     CSTaggedUrn *requestDocx = [CSTaggedUrn fromString:@"cap:generate;ext=docx" error:&error];
-    CSTaggedUrn *requestAny = [CSTaggedUrn fromString:@"cap:generate;ext=anything" error:&error];
 
     BOOL matches;
     matches = [urn conformsTo:requestPdf error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(matches);
+    XCTAssertFalse(matches, @"some ext is not a promise of pdf");
 
     matches = [urn conformsTo:requestDocx error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(matches);
+    XCTAssertFalse(matches, @"some ext is not a promise of docx");
 
-    matches = [urn conformsTo:requestAny error:&error];
+    matches = [requestPdf conformsTo:urn error:&error];
     XCTAssertNil(error);
-    XCTAssertTrue(matches);
+    XCTAssertTrue(matches, @"a pdf is some ext");
+
+    XCTAssertFalse([urn isEquivalentTo:requestPdf error:&error], @"ext and ext=pdf are different tag sets");
+    XCTAssertNil(error);
 }
 
 // TEST0078: Valueless tag in pattern
@@ -1408,8 +1414,10 @@
     CSTaggedUrn *unspecified = [CSTaggedUrn fromString:@"cap:ext=?" error:&error]; // ext=?
     XCTAssertNotNil(unspecified);
 
-    // must_have (*) and exact (pdf): equivalent — * accepts any value
-    XCTAssertTrue([mustHave isEquivalentTo:exact error:&error]);
+    // must_have (*) and exact (pdf): comparable — a pdf is some ext — and
+    // NOT equivalent: equivalence is "the same tag set" (tagged-urn formal,
+    // `equivalent_iff_same_forms`).
+    XCTAssertFalse([mustHave isEquivalentTo:exact error:&error]);
     XCTAssertNil(error);
     XCTAssertTrue([mustHave isComparableTo:exact error:&error]);
     XCTAssertNil(error);
@@ -1426,13 +1434,61 @@
     XCTAssertFalse([mustNot isEquivalentTo:mustHave error:&error]);
     XCTAssertNil(error);
 
-    // unspecified (?) is equivalent to everything — ? matches anything
-    XCTAssertTrue([unspecified isEquivalentTo:exact error:&error]);
+    // unspecified (?) accepts everything, and is equivalent only to what
+    // also constrains nothing.
+    XCTAssertFalse([unspecified isEquivalentTo:exact error:&error]);
     XCTAssertNil(error);
-    XCTAssertTrue([unspecified isEquivalentTo:mustHave error:&error]);
+    XCTAssertFalse([unspecified isEquivalentTo:mustHave error:&error]);
     XCTAssertNil(error);
-    XCTAssertTrue([unspecified isEquivalentTo:mustNot error:&error]);
+    XCTAssertFalse([unspecified isEquivalentTo:mustNot error:&error]);
     XCTAssertNil(error);
+    XCTAssertTrue([unspecified isComparableTo:exact error:&error]);
+    XCTAssertNil(error);
+    CSTaggedUrn *empty = [CSTaggedUrn fromString:@"cap:" error:&error];
+    XCTAssertTrue([unspecified isEquivalentTo:empty error:&error]);
+    XCTAssertNil(error);
+}
+
+// TEST599: every row of the proved model's table.
+//
+// The rules are proved in ../formal (Lean); this is what ties them to this
+// mirror: every row of ../formal/conformance.json (written by the model,
+// `lake exe conformance`) is parsed by this parser and must get the model's
+// verdict. The same table runs in every mirror.
+- (void)test599_everyRowOfTheModelsTable {
+    NSString *here = [NSString stringWithUTF8String:__FILE__];
+    NSString *path = here;
+    for (int i = 0; i < 4; i++) path = [path stringByDeletingLastPathComponent];
+    path = [[path stringByAppendingPathComponent:@"formal"] stringByAppendingPathComponent:@"conformance.json"];
+    NSData *raw = [NSData dataWithContentsOfFile:path];
+    XCTAssertNotNil(raw, @"the model's table at %@", path);
+    NSDictionary *table = [NSJSONSerialization JSONObjectWithData:raw options:0 error:nil];
+    NSArray *refines = table[@"refines"];
+    NSArray *scores = table[@"scores"];
+    NSMutableArray *wrong = [NSMutableArray array];
+    NSError *error = nil;
+    for (NSDictionary *row in refines) {
+        CSTaggedUrn *a = [CSTaggedUrn fromString:row[@"instance"] error:&error];
+        CSTaggedUrn *b = [CSTaggedUrn fromString:row[@"pattern"] error:&error];
+        XCTAssertNotNil(a);
+        XCTAssertNotNil(b);
+        if ([a conformsTo:b error:&error] != [row[@"refines"] boolValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"%@ ⪯ %@: model %@", row[@"instance"], row[@"pattern"], row[@"refines"]]];
+        }
+        if ([a isEquivalentTo:b error:&error] != [row[@"equivalent"] boolValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"%@ ≡ %@: model %@", row[@"instance"], row[@"pattern"], row[@"equivalent"]]];
+        }
+    }
+    for (NSDictionary *row in scores) {
+        CSTaggedUrn *u = [CSTaggedUrn fromString:row[@"urn"] error:&error];
+        if ((NSInteger)[u specificity] != [row[@"score"] integerValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"specificity %@: model %@", row[@"urn"], row[@"score"]]];
+        }
+    }
+    XCTAssertTrue(refines.count > 4000 && scores.count > 60, @"the table is the full one");
+    XCTAssertEqual(wrong.count, 0u, @"%lu answer(s) differ from the model, e.g. %@",
+                   (unsigned long)wrong.count,
+                   [wrong subarrayWithRange:NSMakeRange(0, MIN(8u, wrong.count))]);
 }
 
 // TEST587: Delta equivalent preserves runtime refinement
