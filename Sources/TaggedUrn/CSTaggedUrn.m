@@ -4,6 +4,9 @@
 //
 
 #import "CSTaggedUrn.h"
+// What two URNs mean to each other is decided by the program generated from the proved model
+// in ../formal (see ../lungo.toml), through its C API.
+#import "tagged_urn_formal.h"
 
 NSErrorDomain const CSTaggedUrnErrorDomain = @"CSTaggedUrnErrorDomain";
 
@@ -34,10 +37,60 @@ typedef NS_ENUM(NSInteger, CSParseState) {
     CSParseStateExpectingSemiOrEnd
 };
 
-@interface CSTaggedUrn ()
+@interface CSTaggedUrn () {
+    // The same URN on the proved model's side: its tags with the proof that their keys are
+    // strictly increasing (a TaggedUrn.Exec.Wf, owned). Every semantic question is asked of
+    // it. Made by the designated initializer from the same tags as the fields, which nothing
+    // changes afterwards, so the two cannot describe different URNs.
+    lungo_value *_formal;
+}
 @property (nonatomic, strong) NSString *mutablePrefix;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *mutableTags;
+- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, NSString *> *)tags NS_DESIGNATED_INITIALIZER;
 @end
+
+#pragma mark - The model
+
+/// A model call that fails is a broken invariant — a URN the parser accepted that the model
+/// cannot take, or a runtime that is not working — and there is no answer to give instead.
+static void CSModelFailed(NSString *what, lungo_error *error) {
+    NSString *reason = [NSString stringWithFormat:@"tagged-urn: the model could not %@: %s", what,
+                        error ? lungo_error_message(error) : "no error was reported"];
+    if (error) lungo_error_free(error);
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
+}
+
+static lungo_value *CSModelString(NSString *s) {
+    NSData *utf8 = [s dataUsingEncoding:NSUTF8StringEncoding];
+    return lungo_value_string(utf8.bytes, utf8.length);
+}
+
+/// The model's form of a stored tag value (nil is a key the URN omits); owned.
+static lungo_value *CSConstraintOf(NSString * _Nullable value) {
+    if (value == nil) return tagged_urn_formal_constraint_missing();
+    if ([value isEqualToString:@"?"]) return tagged_urn_formal_constraint_unconstrained();
+    if ([value isEqualToString:@"*"]) return tagged_urn_formal_constraint_present();
+    if ([value isEqualToString:@"!"]) return tagged_urn_formal_constraint_absent();
+    if ([value hasPrefix:@"?="]) return tagged_urn_formal_constraint_optional_not(CSModelString([value substringFromIndex:2]));
+    if ([value hasPrefix:@"!="]) return tagged_urn_formal_constraint_present_not(CSModelString([value substringFromIndex:2]));
+    return tagged_urn_formal_constraint_exact(CSModelString(value));
+}
+
+/// A Bool the model returned; frees it.
+static BOOL CSModelBool(lungo_value *result) {
+    BOOL answer = lungo_value_get_bool(result);
+    lungo_value_free(result);
+    return answer;
+}
+
+/// Runs a model relation of two URNs.
+static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo_value *, lungo_value **, lungo_error **),
+                            const lungo_value *a, const lungo_value *b, NSString *what) {
+    lungo_value *result = NULL;
+    lungo_error *error = NULL;
+    if (relation(a, b, &result, &error) != LUNGO_OK) CSModelFailed(what, error);
+    return CSModelBool(result);
+}
 
 @interface CSTaggedUrnCoordinateDelta ()
 @property (nonatomic, strong) NSString *mutablePrefix;
@@ -635,10 +688,49 @@ static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
 }
 
 + (nullable instancetype)fromPrefix:(NSString *)prefix tagsInternal:(NSDictionary<NSString *, NSString *> *)tags error:(NSError **)error {
-    CSTaggedUrn *instance = [[CSTaggedUrn alloc] init];
-    instance.mutablePrefix = [prefix lowercaseString];
-    instance.mutableTags = [tags mutableCopy];
-    return instance;
+    return [[CSTaggedUrn alloc] initWithPrefix:[prefix lowercaseString] tags:tags];
+}
+
+/// The one way a CSTaggedUrn is made: the fields and the model's value, together, from the same
+/// tags. The model refuses keys that are not strictly increasing; the keys are sorted by their
+/// UTF-8 bytes, which is the code-point order Lean's String < uses, so a refusal is a broken
+/// invariant.
+- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, NSString *> *)tags {
+    if (self = [super init]) {
+        _mutablePrefix = [prefix copy];
+        _mutableTags = [tags mutableCopy];
+        NSArray<NSString *> *keys = [tags.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
+            int c = strcmp(a.UTF8String, b.UTF8String);
+            return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+        }];
+        lungo_value **pairs = keys.count ? calloc(keys.count, sizeof(lungo_value *)) : NULL;
+        for (NSUInteger i = 0; i < keys.count; i++) {
+            pairs[i] = lungo_value_prod(CSModelString(keys[i]), CSConstraintOf(tags[keys[i]]));
+        }
+        lungo_value *list = lungo_value_list(pairs, keys.count);
+        free(pairs);
+        lungo_value *scheme = CSModelString(_mutablePrefix);
+        lungo_value *made = NULL;
+        lungo_error *failure = NULL;
+        int32_t status = tagged_urn_formal_make(scheme, list, &made, &failure);
+        lungo_value_free(scheme);
+        lungo_value_free(list);
+        if (status != LUNGO_OK) CSModelFailed([NSString stringWithFormat:@"build %@", _mutablePrefix], failure);
+        const lungo_value *wf = lungo_value_get_option(made);
+        if (wf == NULL) {
+            lungo_value_free(made);
+            @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                           reason:[NSString stringWithFormat:@"tagged-urn: the model refused %@ with keys %@, which are sorted", _mutablePrefix, keys]
+                                         userInfo:nil];
+        }
+        _formal = lungo_value_clone(wf);
+        lungo_value_free(made);
+    }
+    return self;
+}
+
+- (void)dealloc {
+    lungo_value_free(_formal);
 }
 
 + (instancetype)emptyWithPrefix:(NSString *)prefix {
@@ -646,11 +738,7 @@ static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
 }
 
 - (instancetype)init {
-    if (self = [super init]) {
-        _mutablePrefix = @"";
-        _mutableTags = [NSMutableDictionary dictionary];
-    }
-    return self;
+    return [self initWithPrefix:@"" tags:@{}];
 }
 
 - (nullable NSString *)getTag:(NSString *)key {
@@ -714,55 +802,20 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return CSFormExact;
 }
 
-/// Check if instance value matches pattern constraint.
-///
-/// Every form has ONE meaning — the set of states the key may be in
-/// (absent, or present with some value) — and the same meaning on
-/// either side: the instance satisfies the pattern when every state it
-/// allows, the pattern allows too. This is the rule proved in
-/// tagged-urn's formal/ (tagMatch_iff_allows), which is what makes
-/// refinement transitive and equivalence mean "the same tag set". The
-/// table it replaces gave some forms two meanings (a missing key was
-/// "anything" as a pattern and "absent" as an instance; an
-/// instance-side x or ?x was "whatever the pattern wants"); the change
-/// only removes matches.
+/// Check if instance value matches pattern constraint (nil for a key the URN omits), as the
+/// model decides it: every form has one meaning — the set of states the key may be in — and
+/// the instance satisfies the pattern when every state it allows, the pattern allows too
+/// (tagMatch_iff_allows in ../formal).
 + (BOOL)valuesMatchInst:(NSString *)inst patt:(NSString *)patt {
-    NSString *iVal = nil, *pVal = nil;
-    CSFormKind iKind = CSClassifyForm(inst, &iVal);
-    CSFormKind pKind = CSClassifyForm(patt, &pVal);
-
-    // A pattern that constrains nothing accepts every instance.
-    if (pKind == CSFormMissing || pKind == CSFormNoConstraint) {
-        return YES;
-    }
-
-    switch (iKind) {
-        case CSFormMissing:
-        case CSFormNoConstraint:
-            // An instance that constrains nothing promises nothing.
-            return NO;
-        case CSFormMustNotHave:
-            return pKind == CSFormMustNotHave || pKind == CSFormAbsentOrNotValue;
-        case CSFormAbsentOrNotValue:
-            return pKind == CSFormAbsentOrNotValue && [iVal isEqualToString:pVal];
-        case CSFormMustHaveAny:
-            // Present with SOME value: not a promise of any particular one.
-            return pKind == CSFormMustHaveAny;
-        case CSFormPresentNotValue:
-            if (pKind == CSFormMustHaveAny) return YES;
-            if (pKind == CSFormPresentNotValue || pKind == CSFormAbsentOrNotValue) {
-                return [iVal isEqualToString:pVal];
-            }
-            return NO;
-        case CSFormExact:
-            if (pKind == CSFormMustHaveAny) return YES;
-            if (pKind == CSFormExact) return [iVal isEqualToString:pVal];
-            if (pKind == CSFormPresentNotValue || pKind == CSFormAbsentOrNotValue) {
-                return ![iVal isEqualToString:pVal];
-            }
-            return NO;
-    }
-    return NO;
+    lungo_value *i = CSConstraintOf(inst);
+    lungo_value *p = CSConstraintOf(patt);
+    lungo_value *result = NULL;
+    lungo_error *error = NULL;
+    int32_t status = tagged_urn_formal_values_match(i, p, &result, &error);
+    lungo_value_free(i);
+    lungo_value_free(p);
+    if (status != LUNGO_OK) CSModelFailed(@"match one key", error);
+    return CSModelBool(result);
 }
 
 /// Check if this URN (instance) satisfies the pattern's constraints.
@@ -776,11 +829,7 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         }
         return NO;
     }
-    return [CSTaggedUrn checkMatchInstanceTags:self.mutableTags
-                                instancePrefix:self.mutablePrefix
-                                   patternTags:pattern.mutableTags
-                                 patternPrefix:pattern.mutablePrefix
-                                         error:error];
+    return [CSTaggedUrn checkMatchInstance:self pattern:pattern error:error];
 }
 
 /// Check if this URN (pattern) accepts the given instance.
@@ -794,11 +843,7 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         }
         return NO;
     }
-    return [CSTaggedUrn checkMatchInstanceTags:instance.mutableTags
-                                instancePrefix:instance.mutablePrefix
-                                   patternTags:self.mutableTags
-                                 patternPrefix:self.mutablePrefix
-                                         error:error];
+    return [CSTaggedUrn checkMatchInstance:instance pattern:self error:error];
 }
 
 - (BOOL)isEquivalentTo:(CSTaggedUrn *)other error:(NSError **)error {
@@ -811,20 +856,8 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         return NO;
     }
 
-    NSError *err1 = nil, *err2 = nil;
-    BOOL forward = [self accepts:other error:&err1];
-    if (err1) {
-        if (error) *error = err1;
-        return NO;
-    }
-
-    BOOL reverse = [other accepts:self error:&err2];
-    if (err2) {
-        if (error) *error = err2;
-        return NO;
-    }
-
-    return forward && reverse;
+    if (![CSTaggedUrn samePrefix:self other:other error:error]) return NO;
+    return CSModelRelation(tagged_urn_formal_equivalent, _formal, other->_formal, @"decide equivalence");
 }
 
 - (BOOL)isComparableTo:(CSTaggedUrn *)other error:(NSError **)error {
@@ -837,20 +870,8 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         return NO;
     }
 
-    NSError *err1 = nil, *err2 = nil;
-    BOOL forward = [self accepts:other error:&err1];
-    if (err1) {
-        if (error) *error = err1;
-        return NO;
-    }
-
-    BOOL reverse = [other accepts:self error:&err2];
-    if (err2) {
-        if (error) *error = err2;
-        return NO;
-    }
-
-    return forward || reverse;
+    if (![CSTaggedUrn samePrefix:self other:other error:error]) return NO;
+    return CSModelRelation(tagged_urn_formal_comparable, _formal, other->_formal, @"decide comparability");
 }
 
 - (nullable CSTaggedUrnCoordinateDelta *)deltaFrom:(CSTaggedUrn *)base error:(NSError **)error {
@@ -946,33 +967,23 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:error];
 }
 
-/// Core matching: does instance satisfy pattern's constraints?
-+ (BOOL)checkMatchInstanceTags:(NSDictionary<NSString *, NSString *> *)instanceTags
-                instancePrefix:(NSString *)instancePrefix
-                   patternTags:(NSDictionary<NSString *, NSString *> *)patternTags
-                 patternPrefix:(NSString *)patternPrefix
-                         error:(NSError **)error {
-    if (![instancePrefix isEqualToString:patternPrefix]) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorPrefixMismatch
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Cannot compare URNs with different prefixes: '%@' vs '%@'", instancePrefix, patternPrefix]}];
-        }
-        return NO;
+/// Core matching: does instance satisfy pattern's constraints? Decided by the model (refines,
+/// proved to be refinement); only the prefix check is here, because comparing across prefixes
+/// is a caller's error and says so.
++ (BOOL)checkMatchInstance:(CSTaggedUrn *)instance pattern:(CSTaggedUrn *)pattern error:(NSError **)error {
+    if (![self samePrefix:instance other:pattern error:error]) return NO;
+    return CSModelRelation(tagged_urn_formal_refines, instance->_formal, pattern->_formal, @"decide refinement");
+}
+
+/// Refuse a comparison of URNs with different prefixes.
++ (BOOL)samePrefix:(CSTaggedUrn *)a other:(CSTaggedUrn *)b error:(NSError **)error {
+    if ([a.mutablePrefix isEqualToString:b.mutablePrefix]) return YES;
+    if (error) {
+        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                     code:CSTaggedUrnErrorPrefixMismatch
+                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Cannot compare URNs with different prefixes: '%@' vs '%@'", a.mutablePrefix, b.mutablePrefix]}];
     }
-
-    NSMutableSet<NSString *> *allKeys = [NSMutableSet setWithArray:instanceTags.allKeys];
-    [allKeys addObjectsFromArray:patternTags.allKeys];
-
-    for (NSString *key in allKeys) {
-        NSString *inst = instanceTags[key];
-        NSString *patt = patternTags[key];
-
-        if (![CSTaggedUrn valuesMatchInst:inst patt:patt]) {
-            return NO;
-        }
-    }
-    return YES;
+    return NO;
 }
 
 /// Per-tag truth-table specificity score, applied uniformly to any
@@ -994,13 +1005,20 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
     return 4;
 }
 
-/// Calculate specificity score: sum of per-tag truth-table scores.
+/// Calculate specificity score, as the model computes it: the sum of per-tag truth-table scores.
 - (NSUInteger)specificity {
-    NSUInteger score = 0;
-    for (NSString *value in self.mutableTags.allValues) {
-        score += CSTaggedUrnScoreTagValue(value);
+    lungo_value *result = NULL;
+    lungo_error *error = NULL;
+    if (tagged_urn_formal_specificity(_formal, &result, &error) != LUNGO_OK) CSModelFailed(@"score a URN", error);
+    uint64_t score = 0;
+    BOOL fits = lungo_value_get_nat(result, &score);
+    lungo_value_free(result);
+    if (!fits || score > NSUIntegerMax) {
+        @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                       reason:[NSString stringWithFormat:@"tagged-urn: the specificity of %@ does not fit", [self toString]]
+                                     userInfo:nil];
     }
-    return score;
+    return (NSUInteger)score;
 }
 
 /// Get specificity as a tuple for tie-breaking, ordered from highest
@@ -1182,17 +1200,9 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
-    if (self = [super init]) {
-        _mutablePrefix = [coder decodeObjectOfClass:[NSString class] forKey:@"prefix"];
-        if (!_mutablePrefix) {
-            _mutablePrefix = @"";
-        }
-        _mutableTags = [[coder decodeObjectOfClass:[NSMutableDictionary class] forKey:@"tags"] mutableCopy];
-        if (!_mutableTags) {
-            _mutableTags = [NSMutableDictionary dictionary];
-        }
-    }
-    return self;
+    NSString *prefix = [coder decodeObjectOfClass:[NSString class] forKey:@"prefix"];
+    NSDictionary *tags = [coder decodeObjectOfClasses:[NSSet setWithObjects:[NSDictionary class], [NSString class], nil] forKey:@"tags"];
+    return [self initWithPrefix:prefix ?: @"" tags:tags ?: @{}];
 }
 
 @end

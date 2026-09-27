@@ -1,5 +1,5 @@
 // swift-tools-version: 5.9
-// version: 1.37.53
+// version: {{ project.version }}
 import PackageDescription
 
 let package = Package(
@@ -17,7 +17,13 @@ let package = Package(
     dependencies: [
         // The runtime the code generated from ../formal runs on, at exactly the lungo release
         // that generated it.
-        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "0.27.1270"),
+        {%- if env.MFR_LOCAL_LIBS %}
+        // MFR_LOCAL_LIBS: lungo-swift from the local distribution built from the working copy
+        // of lungo. Re-render without it before committing or releasing.
+        .package(path: "{{ build.root_from_here }}/lungo/distribution/lungo-swift"),
+        {%- else %}
+        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "{{ projects.lungo.latest_remote_version }}"),
+        {%- endif %}
     ],
     targets: [
         // What two URNs mean to each other is decided by the program generated from the
