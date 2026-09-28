@@ -27,7 +27,7 @@ let package = Package(
         // of lungo. Re-render without it before committing or releasing.
         .package(path: "{{ build.root_from_here }}/lungo/distribution/lungo-swift"),
         {%- else %}
-        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "{{ projects.lungo.latest_remote_version }}"),
+        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "{{ projects.lungo.version }}"),
         {%- endif %}
     ],
     targets: [
