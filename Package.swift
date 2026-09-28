@@ -1,5 +1,5 @@
 // swift-tools-version: 5.9
-// version: 1.44.325
+// version: 1.45.369
 import PackageDescription
 
 let package = Package(
@@ -22,7 +22,7 @@ let package = Package(
     dependencies: [
         // The runtime the code generated from ../formal runs on, at exactly the lungo release
         // that generated it.
-        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "1.72.2908"),
+        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "0.27.1270"),
     ],
     targets: [
         // What two URNs mean to each other is decided by the program generated from the
