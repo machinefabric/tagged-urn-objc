@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "lungo-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/machinefabric/lungo-swift.git",
+      "state" : {
+        "revision" : "199ad71155c3d8652fffadb424c14e390525877d",
+        "version" : "1.78.3254"
+      }
+    }
+  ],
+  "version" : 2
+}
