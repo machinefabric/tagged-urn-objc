@@ -1454,7 +1454,9 @@
 // The rules are proved in ../formal (Lean); this is what ties them to this
 // mirror: every row of ../formal/conformance.json (written by the model,
 // `lake exe conformance`) is parsed by this parser and must get the model's
-// verdict. The same table runs in every mirror.
+// verdict — for the guarantee (conformsTo), the possibility (meets), and the
+// complete reading of the instance (satisfies, maySatisfy). The same table runs
+// in every mirror.
 - (void)test599_everyRowOfTheModelsTable {
     NSString *here = [NSString stringWithUTF8String:__FILE__];
     NSString *path = here;
@@ -1477,6 +1479,15 @@
         }
         if ([a isEquivalentTo:b error:&error] != [row[@"equivalent"] boolValue]) {
             [wrong addObject:[NSString stringWithFormat:@"%@ ≡ %@: model %@", row[@"instance"], row[@"pattern"], row[@"equivalent"]]];
+        }
+        if ([a meets:b error:&error] != [row[@"meets"] boolValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"%@ meets %@: model %@", row[@"instance"], row[@"pattern"], row[@"meets"]]];
+        }
+        if ([a satisfies:b error:&error] != [row[@"satisfies"] boolValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"%@ satisfies %@: model %@", row[@"instance"], row[@"pattern"], row[@"satisfies"]]];
+        }
+        if ([a maySatisfy:b error:&error] != [row[@"may_satisfy"] boolValue]) {
+            [wrong addObject:[NSString stringWithFormat:@"%@ may satisfy %@: model %@", row[@"instance"], row[@"pattern"], row[@"may_satisfy"]]];
         }
     }
     for (NSDictionary *row in scores) {

@@ -850,6 +850,42 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return [CSTaggedUrn checkMatchInstance:instance pattern:self error:error];
 }
 
+/// One of the model's relations between two URNs of one prefix, with the nil and
+/// prefix refusals every such question shares.
+- (BOOL)ask:(int32_t (*)(const lungo_value *, const lungo_value *, lungo_value **, lungo_error **))relation
+         of:(CSTaggedUrn *)other
+       what:(NSString *)what
+      error:(NSError **)error {
+    if (!other) {
+        if (error) {
+            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                         code:CSTaggedUrnErrorInvalidFormat
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot compare with nil URN"}];
+        }
+        return NO;
+    }
+    if (![CSTaggedUrn samePrefix:self other:other error:error]) return NO;
+    return CSModelRelation(relation, _formal, other->_formal, what);
+}
+
+/// Whether this URN and `other` COULD be about the same thing: some thing is described
+/// by both. Symmetric — neither is the instance. `conformsTo` is a guarantee; this is the
+/// other question the same meanings answer, and the one a search asks.
+- (BOOL)meets:(CSTaggedUrn *)other error:(NSError **)error {
+    return [self ask:tagged_urn_formal_meets of:other what:@"decide overlap" error:error];
+}
+
+/// Whether this URN, read as a COMPLETE thing — what it does not mention it does not
+/// have — satisfies `pattern`.
+- (BOOL)satisfies:(CSTaggedUrn *)pattern error:(NSError **)error {
+    return [self ask:tagged_urn_formal_refines_closed of:pattern what:@"decide the complete reading" error:error];
+}
+
+/// Whether this URN, read as a complete thing, COULD satisfy `pattern`.
+- (BOOL)maySatisfy:(CSTaggedUrn *)pattern error:(NSError **)error {
+    return [self ask:tagged_urn_formal_meets_closed of:pattern what:@"decide the complete overlap" error:error];
+}
+
 - (BOOL)isEquivalentTo:(CSTaggedUrn *)other error:(NSError **)error {
     if (!other) {
         if (error) {

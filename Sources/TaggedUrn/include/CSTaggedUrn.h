@@ -132,6 +132,45 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)accepts:(CSTaggedUrn * _Nonnull)instance error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ * Whether this URN and `other` COULD be about the same thing: some thing is
+ * described by both. Symmetric — neither is the instance.
+ *
+ * `conformsTo` is a guarantee: everything this URN describes, the pattern
+ * describes. This is the other question the same meanings answer, and the one a
+ * search asks: `media:ext` (some ext) does not conform to `media:ext=pdf`, and is
+ * not excluded by it either — it meets it. Whatever conforms meets; what meets
+ * need not conform, and meeting is not transitive. Decided by the proved model.
+ *
+ * @param other The URN to compare with
+ * @param error Set when the prefixes differ or `other` is nil
+ */
+- (BOOL)meets:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
+
+/**
+ * Whether this URN, read as a COMPLETE thing, satisfies `pattern`.
+ *
+ * A description that omits a key says nothing about it, which is how
+ * `conformsTo` reads both sides. A thing that exists — a value with these tags,
+ * a cap's own list of tags — omits a key because it does not have it. Read so, a
+ * thing that does not mention `x` satisfies `!x`. Use this where the receiver is
+ * what something IS; use `conformsTo` where it is what something is declared to
+ * take or give. Decided by the proved model.
+ *
+ * @param pattern The pattern to satisfy
+ * @param error Set when the prefixes differ or `pattern` is nil
+ */
+- (BOOL)satisfies:(CSTaggedUrn * _Nonnull)pattern error:(NSError * _Nullable * _Nullable)error;
+
+/**
+ * Whether this URN, read as a complete thing, COULD satisfy `pattern`:
+ * `satisfies` is to this as `conformsTo` is to `meets`.
+ *
+ * @param pattern The pattern
+ * @param error Set when the prefixes differ or `pattern` is nil
+ */
+- (BOOL)maySatisfy:(CSTaggedUrn * _Nonnull)pattern error:(NSError * _Nullable * _Nullable)error;
+
+/**
  * Check if two URNs are equivalent (identical tag sets).
  *
  * From order theory: in the specialization partial order defined by
