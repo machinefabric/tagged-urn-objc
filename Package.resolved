@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/machinefabric/lungo-swift.git",
       "state" : {
-        "revision" : "a4554d5a0c3720fb6ca0539544c22ebde710542e",
-        "version" : "1.88.0"
+        "revision" : "930c9dbb7b13a85c72cf84596c6cf872be2817b3",
+        "version" : "1.106.540"
       }
     }
   ],
