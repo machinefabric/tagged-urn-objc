@@ -49,6 +49,5 @@ fastlane/screenshots
 *.swo
 .idea/
 .vscode/
-.wsb/
 *.log
 diffs/
