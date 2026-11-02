@@ -2,7 +2,7 @@
 
 Generated from the test catalogue. Edit the tests, not this file.
 
-99 tests: 99 numbered, 0 unnumbered.
+100 tests: 100 numbered, 0 unnumbered.
 
 ## Numbered
 
@@ -107,4 +107,5 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST597 | tagged-urn/tagged-urn-objc | objc | `test597_builderPreservesCase` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:280 | TEST597: Builder case preservation for quoted values |
 | TEST598 | tagged-urn/tagged-urn-objc | objc | `test598_builderRejectsEmptyValue` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:294 | TEST598: Builder rejects empty tag values (matches Rust's Result error) |
 | TEST599 | tagged-urn/tagged-urn-objc | objc | `test599_everyRowOfTheModelsTable` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1460 | TEST599: every row of the proved model's table. The rules are proved in ../formal (Lean); this is what ties them to this mirror: every row of ../formal/conformance.json (written by the model, `lake exe conformance`) is parsed by this parser and must get the model's verdict — for the guarantee (conformsTo), the possibility (meets), and the complete reading of the instance (satisfies, maySatisfy). The same table runs in every mirror. |
+| TEST600 | tagged-urn/tagged-urn-objc | swift | `test0600_EveryModelFunctionCarriesAProvedClaim` | Tests/TaggedUrnFormalTests/FormalAssuranceTests.swift:10 | TEST0600: every function of the proved model this mirror calls carries a proved claim. The model's package carries what is proved of each function it exports (its assurance document, generated from ../formal): each one decides, equals or keeps what its claim says, and none rests on an assumption about the host — the model needs none. |
 
