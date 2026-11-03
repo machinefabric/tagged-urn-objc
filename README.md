@@ -100,6 +100,7 @@ if try urn.conforms(to: pattern) {
 | `-accepts:error:` | Check if URN (as pattern) accepts an instance |
 | `-specificity` | Get graded specificity score |
 | `-isMoreSpecificThan:error:` | Compare specificity with another URN |
+| `+leastUpperBoundWithPrefix:urns:error:` | The most specific URN every one of `urns` conforms to, made by the proved model |
 | `-toString` | Get canonical string representation |
 
 ### CSTaggedUrnBuilder

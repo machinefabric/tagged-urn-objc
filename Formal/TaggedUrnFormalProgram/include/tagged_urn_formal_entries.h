@@ -6,6 +6,7 @@ const lungo_types *tagged_urn_formal__types(void);
 void tagged_urn_formal__set_host_extern(size_t index, uint64_t callback);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dcomparable(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dequivalent(const uint8_t *input, size_t len, lungo_buffer *out);
+int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dleastUpperBound(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmake(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmeets(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmeetsClosed(const uint8_t *input, size_t len, lungo_buffer *out);

@@ -886,6 +886,55 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return [self ask:tagged_urn_formal_meets_closed of:pattern what:@"decide the complete overlap" error:error];
 }
 
+/// The most specific URN every one of `urns` conforms to, made by the model
+/// (`TaggedUrn.Exec.leastUpperBound`): its tags come back as stored values.
++ (nullable instancetype)leastUpperBoundWithPrefix:(NSString *)prefix
+                                              urns:(NSArray<CSTaggedUrn *> *)urns
+                                             error:(NSError **)error {
+    NSString *lower = [prefix lowercaseString];
+    lungo_value **handles = urns.count ? calloc(urns.count, sizeof(lungo_value *)) : NULL;
+    for (NSUInteger i = 0; i < urns.count; i++) {
+        handles[i] = lungo_value_clone(urns[i]->_formal);
+    }
+    lungo_value *list = lungo_value_list(handles, urns.count);
+    free(handles);
+    lungo_value *scheme = CSModelString(lower);
+    lungo_value *made = NULL;
+    lungo_error *failure = NULL;
+    int32_t status = tagged_urn_formal_least_upper_bound(scheme, list, &made, &failure);
+    lungo_value_free(scheme);
+    lungo_value_free(list);
+    if (status != LUNGO_OK) CSModelFailed([NSString stringWithFormat:@"bound URNs of %@", lower], failure);
+    const lungo_value *tags = lungo_value_get_option(made);
+    if (tags == NULL) {
+        lungo_value_free(made);
+        for (CSTaggedUrn *urn in urns) {
+            if (![urn.mutablePrefix isEqualToString:lower]) {
+                if (error) {
+                    *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
+                                                 code:CSTaggedUrnErrorPrefixMismatch
+                                             userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Cannot bound URNs with different prefixes: '%@' vs '%@'", lower, urn.mutablePrefix]}];
+                }
+                return nil;
+            }
+        }
+        @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                       reason:[NSString stringWithFormat:@"tagged-urn: the model made no bound of URNs that all have the prefix %@", lower]
+                                     userInfo:nil];
+    }
+    NSMutableDictionary<NSString *, NSString *> *bound = [NSMutableDictionary dictionary];
+    for (size_t i = 0; i < lungo_value_count(tags); i++) {
+        const lungo_value *pair = lungo_value_item(tags, i);
+        size_t keyLength = 0, valueLength = 0;
+        const char *key = lungo_value_get_string(lungo_value_first(pair), &keyLength);
+        const char *value = lungo_value_get_string(lungo_value_second(pair), &valueLength);
+        bound[[[NSString alloc] initWithBytes:key length:keyLength encoding:NSUTF8StringEncoding]] =
+            [[NSString alloc] initWithBytes:value length:valueLength encoding:NSUTF8StringEncoding];
+    }
+    lungo_value_free(made);
+    return [[CSTaggedUrn alloc] initWithPrefix:lower tags:bound];
+}
+
 - (BOOL)isEquivalentTo:(CSTaggedUrn *)other error:(NSError **)error {
     if (!other) {
         if (error) {

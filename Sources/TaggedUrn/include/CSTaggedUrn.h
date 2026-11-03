@@ -171,6 +171,27 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)maySatisfy:(CSTaggedUrn * _Nonnull)pattern error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ * The most specific URN every one of `urns` conforms to: their common denominator.
+ *
+ * Key by key, the bound allows every state some input allows. Where no single form
+ * says exactly that, there is no least bound at all — `ext=png` and `ext=jpeg` are both
+ * `ext`, both `ext!=pdf` and both `ext!=gif` — so the bound is the least among those
+ * that exclude only values the inputs name: here `ext`. When one input holds all the
+ * others, the bound is that input. The bound of no URNs is the URN with no tags.
+ *
+ * Made by the proved model (`TaggedUrn.Exec.leastUpperBound`), whose theorems say every
+ * input conforms to the bound and the bound conforms to every such bound of them.
+ *
+ * @param prefix The prefix every URN must have
+ * @param urns The URNs to bound
+ * @param error Set when a URN has another prefix
+ * @return The bound, or nil when a URN has another prefix
+ */
++ (nullable instancetype)leastUpperBoundWithPrefix:(NSString * _Nonnull)prefix
+                                              urns:(NSArray<CSTaggedUrn *> * _Nonnull)urns
+                                             error:(NSError * _Nullable * _Nullable)error;
+
+/**
  * Check if two URNs are equivalent (identical tag sets).
  *
  * From order theory: in the specialization partial order defined by

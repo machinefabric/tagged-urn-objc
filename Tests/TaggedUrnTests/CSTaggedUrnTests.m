@@ -1455,7 +1455,8 @@
 // mirror: every row of ../formal/conformance.json (written by the model,
 // `lake exe conformance`) is parsed by this parser and must get the model's
 // verdict — for the guarantee (conformsTo), the possibility (meets), and the
-// complete reading of the instance (satisfies, maySatisfy). The same table runs
+// complete reading of the instance (satisfies, maySatisfy) — and every set of
+// URNs in it must get the model's bound (leastUpperBound). The same table runs
 // in every mirror.
 - (void)test599_everyRowOfTheModelsTable {
     NSString *here = [NSString stringWithUTF8String:__FILE__];
@@ -1496,10 +1497,47 @@
             [wrong addObject:[NSString stringWithFormat:@"specificity %@: model %@", row[@"urn"], row[@"score"]]];
         }
     }
-    XCTAssertTrue(refines.count > 4000 && scores.count > 60, @"the table is the full one");
+    NSArray *bounds = table[@"bounds"];
+    for (NSDictionary *row in bounds) {
+        NSMutableArray<CSTaggedUrn *> *urns = [NSMutableArray array];
+        for (NSString *s in row[@"urns"]) {
+            CSTaggedUrn *u = [CSTaggedUrn fromString:s error:&error];
+            XCTAssertNotNil(u);
+            [urns addObject:u];
+        }
+        CSTaggedUrn *expected = [CSTaggedUrn fromString:row[@"bound"] error:&error];
+        CSTaggedUrn *bound = [CSTaggedUrn leastUpperBoundWithPrefix:@"media" urns:urns error:&error];
+        XCTAssertNotNil(bound);
+        if (![bound isEqual:expected]) {
+            [wrong addObject:[NSString stringWithFormat:@"bound of %@: %@, model %@", row[@"urns"], [bound toString], row[@"bound"]]];
+        }
+    }
+    XCTAssertTrue(refines.count > 4000 && scores.count > 60 && bounds.count > 5000, @"the table is the full one");
     XCTAssertEqual(wrong.count, 0u, @"%lu answer(s) differ from the model, e.g. %@",
                    (unsigned long)wrong.count,
                    [wrong subarrayWithRange:NSMakeRange(0, MIN(8u, wrong.count))]);
+}
+
+// TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as "some value", the coarser of two comparable URNs, nothing for none, and another prefix refused
+- (void)test392_leastUpperBound {
+    NSError *error = nil;
+    CSTaggedUrn *(^p)(NSString *) = ^CSTaggedUrn *(NSString *s) { return [CSTaggedUrn fromString:s error:nil]; };
+    NSString *(^bound)(NSArray<NSString *> *) = ^NSString *(NSArray<NSString *> *strings) {
+        NSMutableArray<CSTaggedUrn *> *urns = [NSMutableArray array];
+        for (NSString *s in strings) [urns addObject:p(s)];
+        return [[CSTaggedUrn leastUpperBoundWithPrefix:@"media" urns:urns error:nil] toString];
+    };
+
+    XCTAssertEqualObjects(bound(@[@"media:ext=png;image", @"media:ext=jpeg;image"]), [p(@"media:ext;image") toString]);
+    // One input already holds the other: the bound is that input, not the wider `ext`.
+    XCTAssertEqualObjects(bound(@[@"media:ext=png", @"media:ext!=pdf"]), [p(@"media:ext!=pdf") toString]);
+    // A key one input omits says nothing there, so the bound says nothing either.
+    XCTAssertEqualObjects(bound(@[@"media:ext=png;image", @"media:image"]), [p(@"media:image") toString]);
+    XCTAssertEqualObjects(bound(@[]), @"media:");
+
+    CSTaggedUrn *refused = [CSTaggedUrn leastUpperBoundWithPrefix:@"media" urns:@[p(@"media:image"), p(@"cap:image")] error:&error];
+    XCTAssertNil(refused);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorPrefixMismatch);
 }
 
 // TEST587: Delta equivalent preserves runtime refinement

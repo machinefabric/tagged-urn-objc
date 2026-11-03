@@ -54,6 +54,10 @@ int32_t tagged_urn_formal_comparable(const lungo_value *a, const lungo_value *b,
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_equivalent(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);
 
+/* TaggedUrn.Exec.leastUpperBound : String → List TaggedUrn.Exec.Wf → Option (List (String × String)) */
+/* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
+int32_t tagged_urn_formal_least_upper_bound(const lungo_value *scheme, const lungo_value *us, lungo_value **result, lungo_error **error);
+
 /* TaggedUrn.Exec.make : String → List (String × TaggedUrn.Constraint) → Option TaggedUrn.Exec.Wf */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_make(const lungo_value *scheme, const lungo_value *tags, lungo_value **result, lungo_error **error);
