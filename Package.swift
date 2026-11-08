@@ -22,7 +22,9 @@ let package = Package(
     dependencies: [
         // The runtime the code generated from ../formal runs on, at exactly the lungo release
         // that generated it.
-        .package(url: "https://github.com/machinefabric/lungo-swift.git", exact: "1.117.0"),
+        // MFR_LOCAL_LIBS: lungo-swift from the local distribution built from the working copy
+        // of lungo. Re-render without it before committing or releasing.
+        .package(path: "../../.sdx/disposable/build/lungo/distribution/lungo-swift"),
     ],
     targets: [
         // What two URNs mean to each other is decided by the program generated from the
