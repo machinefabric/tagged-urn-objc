@@ -2,7 +2,7 @@
 
 Generated from the test catalogue. Edit the tests, not this file.
 
-100 tests: 100 numbered, 0 unnumbered.
+107 tests: 107 numbered, 0 unnumbered.
 
 ## Numbered
 
@@ -15,12 +15,12 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST5 | tagged-urn/tagged-urn-objc | objc | `test0005_BuilderTagOverrides` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:85 | TEST0005: Builder tag overrides |
 | TEST6 | tagged-urn/tagged-urn-objc | objc | `test0006_BuilderEmptyBuild` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:100 | TEST0006: Builder empty build |
 | TEST7 | tagged-urn/tagged-urn-objc | objc | `test0007_BuilderBuildAllowEmpty` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:111 | TEST0007: Builder build allow empty |
-| TEST8 | tagged-urn/tagged-urn-objc | objc | `test0008_BuilderSingleTag` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:120 | TEST0008: Builder single tag |
-| TEST9 | tagged-urn/tagged-urn-objc | objc | `test0009_BuilderComplex` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:137 | TEST0009: Builder complex |
-| TEST10 | tagged-urn/tagged-urn-objc | objc | `test0010_BuilderWildcards` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:171 | TEST0010: Builder wildcards |
-| TEST11 | tagged-urn/tagged-urn-objc | objc | `test0011_BuilderStaticFactory` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:193 | TEST0011: Builder static factory |
-| TEST12 | tagged-urn/tagged-urn-objc | objc | `test0012_BuilderCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:203 | TEST0012: Builder custom prefix |
-| TEST13 | tagged-urn/tagged-urn-objc | objc | `test0013_BuilderMatchingWithBuiltUrn` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:216 | TEST0013: Builder matching with built urn |
+| TEST8 | tagged-urn/tagged-urn-objc | objc | `test0008_BuilderSingleTag` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:121 | TEST0008: Builder single tag |
+| TEST9 | tagged-urn/tagged-urn-objc | objc | `test0009_BuilderComplex` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:138 | TEST0009: Builder complex |
+| TEST10 | tagged-urn/tagged-urn-objc | objc | `test0010_BuilderWildcards` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:172 | TEST0010: Builder wildcards |
+| TEST11 | tagged-urn/tagged-urn-objc | objc | `test0011_BuilderStaticFactory` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:194 | TEST0011: Builder static factory |
+| TEST12 | tagged-urn/tagged-urn-objc | objc | `test0012_BuilderCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:204 | TEST0012: Builder custom prefix |
+| TEST13 | tagged-urn/tagged-urn-objc | objc | `test0013_BuilderMatchingWithBuiltUrn` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:217 | TEST0013: Builder matching with built urn |
 | TEST14 | tagged-urn/tagged-urn-objc | objc | `test0014_TaggedUrnCreation` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:17 | TEST0014: Tagged urn creation |
 | TEST15 | tagged-urn/tagged-urn-objc | objc | `test0015_CustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:32 | TEST0015: Custom prefix |
 | TEST16 | tagged-urn/tagged-urn-objc | objc | `test0016_PrefixCaseInsensitive` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:44 | TEST0016: Prefix case insensitive |
@@ -39,23 +39,23 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST29 | tagged-urn/tagged-urn-objc | objc | `test0029_Builder` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:289 | TEST0029: Builder |
 | TEST30 | tagged-urn/tagged-urn-objc | objc | `test0030_BuilderWithCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:306 | TEST0030: Builder with custom prefix |
 | TEST31 | tagged-urn/tagged-urn-objc | objc | `test0031_WithTag` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:319 | TEST0031: With tag |
-| TEST32 | tagged-urn/tagged-urn-objc | objc | `test0032_WithoutTag` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:332 | TEST0032: Without tag |
-| TEST33 | tagged-urn/tagged-urn-objc | objc | `test0033_WildcardTag` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:344 | TEST0033: Wildcard tag |
-| TEST34 | tagged-urn/tagged-urn-objc | objc | `test0034_Subset` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:365 | TEST0034: Subset |
-| TEST35 | tagged-urn/tagged-urn-objc | objc | `test0035_Merge` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:374 | TEST0035: Merge |
-| TEST36 | tagged-urn/tagged-urn-objc | objc | `test0036_MergePrefixMismatch` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:388 | TEST0036: Merge prefix mismatch |
-| TEST37 | tagged-urn/tagged-urn-objc | objc | `test0037_Equality` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:401 | TEST0037: Equality |
-| TEST38 | tagged-urn/tagged-urn-objc | objc | `test0038_EqualityDifferentPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:413 | TEST0038: Equality different prefix |
-| TEST39 | tagged-urn/tagged-urn-objc | objc | `test0039_Coding` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:422 | TEST0039: Coding |
-| TEST40 | tagged-urn/tagged-urn-objc | objc | `test0040_CodingWithCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:442 | TEST0040: Coding with custom prefix |
-| TEST41 | tagged-urn/tagged-urn-objc | objc | `test0041_Copying` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:462 | TEST0041: Copying |
-| TEST42 | tagged-urn/tagged-urn-objc | objc | `test0042_EmptyTaggedUrn` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:474 | TEST0042: Empty tagged urn |
-| TEST43 | tagged-urn/tagged-urn-objc | objc | `test0043_EmptyWithCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:506 | TEST0043: Empty with custom prefix |
-| TEST44 | tagged-urn/tagged-urn-objc | objc | `test0044_EmptyWithPrefixMethod` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:516 | TEST0044: Empty with prefix method |
-| TEST45 | tagged-urn/tagged-urn-objc | objc | `test0045_ExtendedCharacterSupport` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:525 | TEST0045: Extended character support |
-| TEST46 | tagged-urn/tagged-urn-objc | objc | `test0046_WildcardRestrictions` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:536 | TEST0046: Wildcard restrictions |
-| TEST47 | tagged-urn/tagged-urn-objc | objc | `test0047_DuplicateKeyRejection` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:555 | TEST0047: Duplicate key rejection |
-| TEST48 | tagged-urn/tagged-urn-objc | objc | `test0048_NumericKeyRestriction` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:565 | TEST0048: Numeric key restriction |
+| TEST32 | tagged-urn/tagged-urn-objc | objc | `test0032_WithoutTag` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:333 | TEST0032: Without tag |
+| TEST33 | tagged-urn/tagged-urn-objc | objc | `test0033_WildcardTag` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:345 | TEST0033: Wildcard tag |
+| TEST34 | tagged-urn/tagged-urn-objc | objc | `test0034_Subset` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:366 | TEST0034: Subset |
+| TEST35 | tagged-urn/tagged-urn-objc | objc | `test0035_Merge` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:375 | TEST0035: Merge |
+| TEST36 | tagged-urn/tagged-urn-objc | objc | `test0036_MergePrefixMismatch` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:389 | TEST0036: Merge prefix mismatch |
+| TEST37 | tagged-urn/tagged-urn-objc | objc | `test0037_Equality` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:402 | TEST0037: Equality |
+| TEST38 | tagged-urn/tagged-urn-objc | objc | `test0038_EqualityDifferentPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:414 | TEST0038: Equality different prefix |
+| TEST39 | tagged-urn/tagged-urn-objc | objc | `test0039_Coding` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:423 | TEST0039: Coding |
+| TEST40 | tagged-urn/tagged-urn-objc | objc | `test0040_CodingWithCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:443 | TEST0040: Coding with custom prefix |
+| TEST41 | tagged-urn/tagged-urn-objc | objc | `test0041_Copying` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:463 | TEST0041: Copying |
+| TEST42 | tagged-urn/tagged-urn-objc | objc | `test0042_EmptyTaggedUrn` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:475 | TEST0042: Empty tagged urn |
+| TEST43 | tagged-urn/tagged-urn-objc | objc | `test0043_EmptyWithCustomPrefix` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:507 | TEST0043: Empty with custom prefix |
+| TEST44 | tagged-urn/tagged-urn-objc | objc | `test0044_EmptyWithPrefixMethod` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:517 | TEST0044: Empty with prefix method |
+| TEST45 | tagged-urn/tagged-urn-objc | objc | `test0045_ExtendedCharacterSupport` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:527 | TEST0045: Extended character support |
+| TEST46 | tagged-urn/tagged-urn-objc | objc | `test0046_WildcardRestrictions` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:538 | TEST0046: Wildcard restrictions |
+| TEST47 | tagged-urn/tagged-urn-objc | objc | `test0047_DuplicateKeyRejection` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:557 | TEST0047: Duplicate key rejection |
+| TEST48 | tagged-urn/tagged-urn-objc | objc | `test0048_NumericKeyRestriction` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:567 | TEST0048: Numeric key restriction |
 | TEST49 | tagged-urn/tagged-urn-objc | objc | `test0049_UnquotedValuesLowercased` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:598 | TEST0049: Unquoted values lowercased |
 | TEST50 | tagged-urn/tagged-urn-objc | objc | `test0050_QuotedValuesPreserveCase` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:621 | TEST0050: Quoted values preserve case |
 | TEST51 | tagged-urn/tagged-urn-objc | objc | `test0051_QuotedValueSpecialChars` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:650 | TEST0051: Quoted value special chars |
@@ -92,6 +92,7 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST82 | tagged-urn/tagged-urn-objc | objc | `test0082_EmptyValueStillError` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1219 | TEST0082: Empty value still error |
 | TEST83 | tagged-urn/tagged-urn-objc | objc | `test0083_ValuelessTagDirectionalAccepts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1233 | TEST0083: Valueless tag directional accepts |
 | TEST84 | tagged-urn/tagged-urn-objc | objc | `test0084_ValuelessNumericKeyStillRejected` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1264 | TEST0084: Valueless numeric key still rejected |
+| TEST392 | tagged-urn/tagged-urn-objc | objc | `test392_leastUpperBound` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1522 | TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as "some value", the coarser of two comparable URNs, nothing for none, and another prefix refused |
 | TEST578 | tagged-urn/tagged-urn-objc | objc | `test578_equivalentIdenticalTags` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1280 | TEST578: Equivalent URNs with identical tag sets |
 | TEST579 | tagged-urn/tagged-urn-objc | objc | `test579_notEquivalentWhenOneMoreSpecific` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1294 | TEST579: Non-equivalent URNs where one is more specific |
 | TEST580 | tagged-urn/tagged-urn-objc | objc | `test580_comparableSpecializationChain` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1308 | TEST580: Comparable URNs on the same specialization chain |
@@ -100,12 +101,18 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST583 | tagged-urn/tagged-urn-objc | objc | `test583_prefixMismatchErrors` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1368 | TEST583: Prefix mismatch returns error for both relations |
 | TEST584 | tagged-urn/tagged-urn-objc | objc | `test584_emptyTagsComparableToAll` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1385 | TEST584: Empty tag set is comparable to everything with same prefix |
 | TEST586 | tagged-urn/tagged-urn-objc | objc | `test586_specialValues` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1406 | TEST586: Special values (*, !, ?) with isEquivalent and isComparable |
-| TEST587 | tagged-urn/tagged-urn-objc | objc | `test587_deltaEquivalentPreservesRuntimeRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1506 | TEST587: Delta equivalent preserves runtime refinement |
-| TEST588 | tagged-urn/tagged-urn-objc | objc | `test588_deltaIncomparableReplacementPreservesUnrelatedRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1528 | TEST588: Delta incomparable replacement preserves unrelated refinement |
-| TEST589 | tagged-urn/tagged-urn-objc | objc | `test589_deltaComparableRemovalDropsOnlyDeclaredCoordinate` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1549 | TEST589: Delta comparable removal drops only declared coordinate |
-| TEST596 | tagged-urn/tagged-urn-objc | objc | `test596_builderWithPrefix` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:268 | TEST596: Builder with prefix verification |
-| TEST597 | tagged-urn/tagged-urn-objc | objc | `test597_builderPreservesCase` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:280 | TEST597: Builder case preservation for quoted values |
-| TEST598 | tagged-urn/tagged-urn-objc | objc | `test598_builderRejectsEmptyValue` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:294 | TEST598: Builder rejects empty tag values (matches Rust's Result error) |
-| TEST599 | tagged-urn/tagged-urn-objc | objc | `test599_everyRowOfTheModelsTable` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1460 | TEST599: every row of the proved model's table. The rules are proved in ../formal (Lean); this is what ties them to this mirror: every row of ../formal/conformance.json (written by the model, `lake exe conformance`) is parsed by this parser and must get the model's verdict — for the guarantee (conformsTo), the possibility (meets), and the complete reading of the instance (satisfies, maySatisfy). The same table runs in every mirror. |
+| TEST587 | tagged-urn/tagged-urn-objc | objc | `test587_deltaEquivalentPreservesRuntimeRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1544 | TEST587: Delta equivalent preserves runtime refinement |
+| TEST588 | tagged-urn/tagged-urn-objc | objc | `test588_deltaIncomparableReplacementPreservesUnrelatedRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1566 | TEST588: Delta incomparable replacement preserves unrelated refinement |
+| TEST589 | tagged-urn/tagged-urn-objc | objc | `test589_deltaComparableRemovalDropsOnlyDeclaredCoordinate` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1587 | TEST589: Delta comparable removal drops only declared coordinate |
+| TEST596 | tagged-urn/tagged-urn-objc | objc | `test596_builderWithPrefix` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:269 | TEST596: Builder with prefix verification |
+| TEST597 | tagged-urn/tagged-urn-objc | objc | `test597_builderPreservesCase` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:281 | TEST597: Builder case preservation for quoted values |
+| TEST598 | tagged-urn/tagged-urn-objc | objc | `test598_builderRejectsEmptyValue` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:295 | TEST598: Builder rejects empty tag values (matches Rust's Result error) |
+| TEST599 | tagged-urn/tagged-urn-objc | objc | `test599_everyRowOfTheModelsTable` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1461 | TEST599: every row of the proved model's table. The rules are proved in ../formal (Lean); this is what ties them to this mirror: every row of ../formal/conformance.json (written by the model, `lake exe conformance`) is parsed by this parser and must get the model's verdict — for the guarantee (conformsTo), the possibility (meets), and the complete reading of the instance (satisfies, maySatisfy) — and every set of URNs in it must get the model's bound (leastUpperBound). The same table runs in every mirror. |
 | TEST600 | tagged-urn/tagged-urn-objc | swift | `test0600_EveryModelFunctionCarriesAProvedClaim` | Tests/TaggedUrnFormalTests/FormalAssuranceTests.swift:10 | TEST0600: every function of the proved model this mirror calls carries a proved claim. The model's package carries what is proved of each function it exports (its assurance document, generated from ../formal): each one decides, equals or keeps what its claim says, and none rests on an assumption about the host — the model needs none. |
+| TEST6752 | tagged-urn/tagged-urn-objc | objc | `test6752_QualifierValueAlias` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1625 | TEST6752: An unquoted value that begins with ? or ! is that qualifier (x=?v is x?=v, x=!v is x!=v); a quoted one is literal |
+| TEST6753 | tagged-urn/tagged-urn-objc | objc | `test6753_PrefixAndKeyAreIdentifiers` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1648 | TEST6753: The prefix and every key are identifiers (an ASCII letter, then ASCII letters, digits and -), lowered, in parsing and in every constructor |
+| TEST6754 | tagged-urn/tagged-urn-objc | objc | `test6754_EveryValueReadsBack` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1694 | TEST6754: Every value a URN holds prints so that it reads back as itself |
+| TEST6755 | tagged-urn/tagged-urn-objc | objc | `test6755_UnquotedValueTakesAnyNonSeparator` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1711 | TEST6755: An unquoted value takes any character but ; = " \ and whitespace |
+| TEST6756 | tagged-urn/tagged-urn-objc | objc | `test6756_QuotedValueIsLiteral` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1728 | TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier |
+| TEST7241 | tagged-urn/tagged-urn-objc | objc | `test7241_UrnsAreOrderedByTheirParts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1757 | TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value |
 

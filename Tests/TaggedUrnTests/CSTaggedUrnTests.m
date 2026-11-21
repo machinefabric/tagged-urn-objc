@@ -1702,6 +1702,8 @@ static NSString *QuotedLiteral(NSString *value) {
         XCTAssertNotNil(reparsed, @"%@ printed as %@ does not read back: %@", value, printed, error);
         XCTAssertEqualObjects(reparsed, urn, @"%@ printed as %@", value, printed);
         XCTAssertEqualObjects([reparsed getTag:@"k"], [CSTagConstraint exact:value]);
+        // writeValue writes the value as the URN prints it.
+        XCTAssertEqualObjects(printed, [@"t:k=" stringByAppendingString:[CSTaggedUrn writeValue:value]], @"writeValue of %@", value);
     }
 }
 
@@ -1748,6 +1750,34 @@ static NSString *QuotedLiteral(NSString *value) {
     // The builder's exact value is literal too
     CSTaggedUrn *built = [[[CSTaggedUrnBuilder builderWithPrefix:@"t"] tag:@"x" value:@"*"] build:&error];
     XCTAssertEqualObjects(built, star);
+}
+
+
+// TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value
+- (void)test7241_UrnsAreOrderedByTheirParts {
+    void (^before)(NSString *, NSString *) = ^(NSString *a, NSString *b) {
+        XCTAssertEqual([Parse(a) compare:Parse(b)], NSOrderedAscending, @"%@ stands before %@", a, b);
+        XCTAssertEqual([Parse(b) compare:Parse(a)], NSOrderedDescending, @"%@ stands after %@", b, a);
+    };
+
+    // The text orders file-path first; the parts order file first.
+    XCTAssertEqual([[Parse(@"t:file-path") toString] compare:[Parse(@"t:file;sample") toString]], NSOrderedAscending);
+    before(@"t:file;sample", @"t:file-path");
+    // The prefix decides first.
+    before(@"b:z", @"c:a");
+    // A URN whose tags are the beginning of another's stands first.
+    before(@"t:file", @"t:file;sample");
+    // One key, each form in the truth table's order.
+    NSArray<NSString *> *forms = @[@"t:?x", @"t:x?=v", @"t:x", @"t:x!=v", @"t:x=v", @"t:!x"];
+    for (NSUInteger i = 0; i + 1 < forms.count; i++) {
+        before(forms[i], forms[i + 1]);
+    }
+    // One form, values in their own order; a quoted value is a value.
+    before(@"t:x=ascii", @"t:x=utf8");
+    before(@"t:x=\"*\"", @"t:x=a");
+    before(@"t:x?=a", @"t:x?=b");
+    // Writing order is no part of it.
+    XCTAssertEqual([Parse(@"t:b;a") compare:Parse(@"t:a;b")], NSOrderedSame);
 }
 
 @end
