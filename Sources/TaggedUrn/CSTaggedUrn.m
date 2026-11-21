@@ -12,17 +12,20 @@ NSErrorDomain const CSTaggedUrnErrorDomain = @"CSTaggedUrnErrorDomain";
 
 // Parser states for state machine.
 //
-// The parser handles six tag forms — the canonical alphabet of the
-// constraint truth table:
+// The parser reads the six tag forms — the canonical alphabet of the
+// constraint truth table — into the constraint each writes:
 //
-//   | Authored                | Canonical | Stored value | Score | Reading                                  |
-//   |-------------------------|-----------|--------------|------:|------------------------------------------|
-//   | `?x` ≡ `x?`             | `?x`      | "?"          |     0 | no constraint                            |
-//   | `?x=v` ≡ `x?=v`         | `x?=v`    | "?=v"        |     1 | absent OR (present and not v)            |
-//   | `x` ≡ `x=*`             | `x`       | "*"          |     2 | present with any value                   |
-//   | `!x=v` ≡ `x!=v`         | `x!=v`    | "!=v"        |     3 | present and not v                        |
-//   | `x=v`                   | `x=v`     | "v"          |     4 | present and exactly v (`v ∉ {?, !, *}`)  |
-//   | `!x` ≡ `x!`             | `!x`      | "!"          |     5 | absent (must-not-have)                   |
+//   | Authored                 | Canonical | Constraint     | Score | Reading                       |
+//   |--------------------------|-----------|----------------|------:|-------------------------------|
+//   | `?x` ≡ `x?` ≡ `x=?`      | `?x`      | unconstrained  |     0 | no constraint                 |
+//   | `?x=v` ≡ `x?=v` ≡ `x=?v` | `x?=v`    | optionalNot v  |     1 | absent OR (present and not v) |
+//   | `x` ≡ `x=*`              | `x`       | present        |     2 | present with any value        |
+//   | `!x=v` ≡ `x!=v` ≡ `x=!v` | `x!=v`    | presentNot v   |     3 | present and not v             |
+//   | `x=v`                    | `x=v`     | exact v        |     4 | present and exactly v         |
+//   | `!x` ≡ `x!` ≡ `x=!`      | `!x`      | absent         |     5 | absent (must-not-have)        |
+//
+// A quoted value is literal: `x="?v"` is the exact value `?v`, and `x="*"` the exact
+// value `*`, never the marker.
 typedef NS_ENUM(NSInteger, CSParseState) {
     CSParseStateExpectingKey,
     CSParseStateAfterPrefixQuestion,
@@ -37,6 +40,84 @@ typedef NS_ENUM(NSInteger, CSParseState) {
     CSParseStateExpectingSemiOrEnd
 };
 
+static NSError *CSTaggedUrnMakeError(CSTaggedUrnError code, NSString *message) {
+    return [NSError errorWithDomain:CSTaggedUrnErrorDomain code:code userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+#pragma mark - CSTagConstraint
+
+@implementation CSTagConstraint
+
+- (instancetype)initWithKind:(CSTagConstraintKind)kind value:(nullable NSString *)value {
+    if (self = [super init]) {
+        _kind = kind;
+        _value = [value copy];
+    }
+    return self;
+}
+
++ (instancetype)missing { return [[self alloc] initWithKind:CSTagConstraintKindMissing value:nil]; }
++ (instancetype)unconstrained { return [[self alloc] initWithKind:CSTagConstraintKindUnconstrained value:nil]; }
++ (instancetype)present { return [[self alloc] initWithKind:CSTagConstraintKindPresent value:nil]; }
++ (instancetype)absent { return [[self alloc] initWithKind:CSTagConstraintKindAbsent value:nil]; }
++ (instancetype)exact:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindExact value:value]; }
++ (instancetype)optionalNot:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindOptionalNot value:value]; }
++ (instancetype)presentNot:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindPresentNot value:value]; }
+
+/// Whether this form carries a value.
+- (BOOL)carriesValue {
+    return self.kind == CSTagConstraintKindExact || self.kind == CSTagConstraintKindOptionalNot ||
+           self.kind == CSTagConstraintKindPresentNot;
+}
+
+- (BOOL)isEqual:(id)object {
+    if (![object isKindOfClass:[CSTagConstraint class]]) return NO;
+    CSTagConstraint *other = object;
+    return self.kind == other.kind && (self.value == other.value || [self.value isEqualToString:other.value]);
+}
+
+- (NSUInteger)hash {
+    return (NSUInteger)self.kind ^ self.value.hash;
+}
+
+- (id)copyWithZone:(NSZone *)zone {
+    return self;
+}
+
+- (NSString *)description {
+    return self.value ? [NSString stringWithFormat:@"%ld(%@)", (long)self.kind, self.value]
+                      : [NSString stringWithFormat:@"%ld", (long)self.kind];
+}
+
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeInteger:self.kind forKey:@"kind"];
+    [coder encodeObject:self.value forKey:@"value"];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    NSInteger kind = [coder decodeIntegerForKey:@"kind"];
+    NSString *value = [coder decodeObjectOfClass:[NSString class] forKey:@"value"];
+    if (kind < CSTagConstraintKindMissing || kind > CSTagConstraintKindAbsent) {
+        [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
+                             [NSString stringWithFormat:@"no constraint has kind %ld", (long)kind])];
+        return nil;
+    }
+    CSTagConstraint *decoded = [self initWithKind:(CSTagConstraintKind)kind value:value];
+    if ([decoded carriesValue] != (value != nil)) {
+        [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
+                             [NSString stringWithFormat:@"constraint kind %ld %@ a value", (long)kind,
+                              value ? @"carries no" : @"needs"])];
+        return nil;
+    }
+    return decoded;
+}
+
+@end
+
 @interface CSTaggedUrn () {
     // The same URN on the proved model's side: its tags with the proof that their keys are
     // strictly increasing (a TaggedUrn.Exec.Wf, owned). Every semantic question is asked of
@@ -45,8 +126,8 @@ typedef NS_ENUM(NSInteger, CSParseState) {
     lungo_value *_formal;
 }
 @property (nonatomic, strong) NSString *mutablePrefix;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *mutableTags;
-- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, NSString *> *)tags NS_DESIGNATED_INITIALIZER;
+@property (nonatomic, strong) NSDictionary<NSString *, CSTagConstraint *> *storedTags;
+- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, CSTagConstraint *> *)tags NS_DESIGNATED_INITIALIZER;
 @end
 
 #pragma mark - The model
@@ -65,15 +146,46 @@ static lungo_value *CSModelString(NSString *s) {
     return lungo_value_string(utf8.bytes, utf8.length);
 }
 
-/// The model's form of a stored tag value (nil is a key the URN omits); owned.
-static lungo_value *CSConstraintOf(NSString * _Nullable value) {
-    if (value == nil) return tagged_urn_formal_constraint_missing();
-    if ([value isEqualToString:@"?"]) return tagged_urn_formal_constraint_unconstrained();
-    if ([value isEqualToString:@"*"]) return tagged_urn_formal_constraint_present();
-    if ([value isEqualToString:@"!"]) return tagged_urn_formal_constraint_absent();
-    if ([value hasPrefix:@"?="]) return tagged_urn_formal_constraint_optional_not(CSModelString([value substringFromIndex:2]));
-    if ([value hasPrefix:@"!="]) return tagged_urn_formal_constraint_present_not(CSModelString([value substringFromIndex:2]));
-    return tagged_urn_formal_constraint_exact(CSModelString(value));
+static NSString *CSStringOfModel(const lungo_value *v) {
+    size_t length = 0;
+    const char *bytes = lungo_value_get_string(v, &length);
+    return [[NSString alloc] initWithBytes:bytes length:length encoding:NSUTF8StringEncoding];
+}
+
+/// The model's value of a constraint; owned.
+static lungo_value *CSModelConstraint(CSTagConstraint *c) {
+    switch (c.kind) {
+        case CSTagConstraintKindMissing: return tagged_urn_formal_constraint_missing();
+        case CSTagConstraintKindUnconstrained: return tagged_urn_formal_constraint_unconstrained();
+        case CSTagConstraintKindOptionalNot: return tagged_urn_formal_constraint_optional_not(CSModelString(c.value));
+        case CSTagConstraintKindPresent: return tagged_urn_formal_constraint_present();
+        case CSTagConstraintKindPresentNot: return tagged_urn_formal_constraint_present_not(CSModelString(c.value));
+        case CSTagConstraintKindExact: return tagged_urn_formal_constraint_exact(CSModelString(c.value));
+        case CSTagConstraintKindAbsent: return tagged_urn_formal_constraint_absent();
+    }
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"tagged-urn: no constraint has kind %ld", (long)c.kind]
+                                 userInfo:nil];
+}
+
+/// A constraint the model returned, read by its constructor.
+static CSTagConstraint *CSConstraintOfModel(const lungo_value *v) {
+    switch (lungo_value_ctor_index(v)) {
+        case TAGGED_URN_FORMAL_CONSTRAINT_MISSING: return [CSTagConstraint missing];
+        case TAGGED_URN_FORMAL_CONSTRAINT_UNCONSTRAINED: return [CSTagConstraint unconstrained];
+        case TAGGED_URN_FORMAL_CONSTRAINT_OPTIONAL_NOT:
+            return [CSTagConstraint optionalNot:CSStringOfModel(tagged_urn_formal_constraint_optional_not_value(v))];
+        case TAGGED_URN_FORMAL_CONSTRAINT_PRESENT: return [CSTagConstraint present];
+        case TAGGED_URN_FORMAL_CONSTRAINT_PRESENT_NOT:
+            return [CSTagConstraint presentNot:CSStringOfModel(tagged_urn_formal_constraint_present_not_value(v))];
+        case TAGGED_URN_FORMAL_CONSTRAINT_EXACT:
+            return [CSTagConstraint exact:CSStringOfModel(tagged_urn_formal_constraint_exact_value(v))];
+        case TAGGED_URN_FORMAL_CONSTRAINT_ABSENT: return [CSTagConstraint absent];
+    }
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"tagged-urn: the model returned constraint constructor %u",
+                                           lungo_value_ctor_index(v)]
+                                 userInfo:nil];
 }
 
 /// A Bool the model returned; frees it.
@@ -92,18 +204,167 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     return CSModelBool(result);
 }
 
+#pragma mark - The grammar
+
+/// Whether a character may begin a prefix or a key: an ASCII letter.
+static BOOL CSIsIdentifierStart(unichar c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+/// Whether a character may stand in a prefix or key after its first.
+static BOOL CSIsValidKeyChar(unichar c) {
+    return CSIsIdentifierStart(c) || (c >= '0' && c <= '9') || c == '-';
+}
+
+/// Whether a character may stand in an unquoted value: anything but the separators `;` `=`,
+/// the quoting characters `"` `\`, and whitespace.
+static BOOL CSIsValidUnquotedValueChar(unichar c) {
+    return c != ';' && c != '=' && c != '"' && c != '\\' &&
+           ![[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:c];
+}
+
+/// An ASCII letter lowered, any other character as it is: unquoted values are lowered so.
+static unichar CSAsciiLower(unichar c) {
+    return (c >= 'A' && c <= 'Z') ? (unichar)(c + ('a' - 'A')) : c;
+}
+
+/// `s` as an identifier — an ASCII letter, then ASCII letters, digits and `-` — lowered;
+/// `what` names it in the error ("prefix", "key"). nil, with the error, when it is not one.
+static NSString * _Nullable CSIdentifier(NSString *what, NSString *s, NSError **error) {
+    if (s.length == 0) {
+        if (error) {
+            *error = [what isEqualToString:@"prefix"]
+                ? CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyPrefix, @"URN prefix cannot be empty")
+                : CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag, [NSString stringWithFormat:@"empty %@", what]);
+        }
+        return nil;
+    }
+    for (NSUInteger pos = 0; pos < s.length; pos++) {
+        unichar c = [s characterAtIndex:pos];
+        BOOL allowed = pos == 0 ? CSIsIdentifierStart(c) : CSIsValidKeyChar(c);
+        if (!allowed) {
+            if (error) {
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                    [NSString stringWithFormat:@"invalid character '%C' in %@ at position %lu", c, what, (unsigned long)pos]);
+            }
+            return nil;
+        }
+    }
+    return [s lowercaseString];
+}
+
+/// Refuses a constraint a URN cannot write for `key`: missing (a key with no constraint is
+/// omitted), or an empty value.
+static BOOL CSCheckConstraint(NSString *key, CSTagConstraint * _Nullable c, NSError **error) {
+    if (c == nil || ![c isKindOfClass:[CSTagConstraint class]] || c.kind == CSTagConstraintKindMissing) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
+                [NSString stringWithFormat:@"key '%@' given no constraint: a key with no constraint is omitted", key]);
+        }
+        return NO;
+    }
+    if ([c carriesValue] && c.value.length == 0) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag, [NSString stringWithFormat:@"empty value for key '%@'", key]);
+        }
+        return NO;
+    }
+    return YES;
+}
+
+/// The constraint a value writes under a qualifier (0 for none).
+static CSTagConstraint *CSQualified(char qualifier, NSString *value) {
+    switch (qualifier) {
+        case 0:   return [CSTagConstraint exact:value];
+        case '?': return [CSTagConstraint optionalNot:value];
+        case '!': return [CSTagConstraint presentNot:value];
+    }
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"invalid qualifier %d", qualifier]
+                                 userInfo:nil];
+}
+
+/// The constraint of a value-less tag, given its qualifier (0, '?' or '!').
+static CSTagConstraint *CSCanonicalNoValue(char qualifier) {
+    switch (qualifier) {
+        case 0:   return [CSTagConstraint present];
+        case '?': return [CSTagConstraint unconstrained];
+        case '!': return [CSTagConstraint absent];
+    }
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"invalid qualifier %d", qualifier]
+                                 userInfo:nil];
+}
+
+/// A qualifier and a sigil (`*`, `?`, `!`) make incompatible claims.
+static BOOL CSRefuseSigilUnderQualifier(char qualifier, NSString *key, NSString *value, NSError **error) {
+    if ([value isEqualToString:@"*"] || [value isEqualToString:@"?"] || [value isEqualToString:@"!"]) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                [NSString stringWithFormat:@"qualifier '%c' on key '%@' cannot combine with sigil value '%@': "
+                                            "use a real value or drop the qualifier", qualifier, key, value]);
+        }
+        return NO;
+    }
+    return YES;
+}
+
+/// The constraint a parsed (qualifier, value) pair writes. A quoted value is literal: exact,
+/// or optionalNot/presentNot under a qualifier. An unquoted `*`, `?` or `!` is a sigil; an
+/// unquoted value that begins with `?` or `!` is that qualifier (`x=?v` ≡ `x?=v`). A qualifier
+/// on an unquoted sigil, or a second qualifier, is refused.
+static CSTagConstraint * _Nullable CSCanonicalizeValue(char qualifier, BOOL quoted, NSString *key, NSString *value, NSError **error) {
+    if (value.length == 0) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag, [NSString stringWithFormat:@"empty value for key '%@'", key]);
+        }
+        return nil;
+    }
+    if (quoted) return CSQualified(qualifier, [value copy]);
+    unichar first = [value characterAtIndex:0];
+    if (qualifier == 0) {
+        if ([value isEqualToString:@"*"]) return [CSTagConstraint present];
+        if ([value isEqualToString:@"?"]) return [CSTagConstraint unconstrained];
+        if ([value isEqualToString:@"!"]) return [CSTagConstraint absent];
+        if (first == '?' || first == '!') {
+            NSString *rest = [value substringFromIndex:1];
+            if (!CSRefuseSigilUnderQualifier((char)first, key, rest, error)) return nil;
+            return CSQualified((char)first, rest);
+        }
+        return [CSTagConstraint exact:[value copy]];
+    }
+    if (value.length > 1 && (first == '?' || first == '!')) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                [NSString stringWithFormat:@"qualifier '%c' on key '%@' cannot combine with a second qualifier in value '%@': "
+                                            "quote the value to make it literal", qualifier, key, value]);
+        }
+        return nil;
+    }
+    if (!CSRefuseSigilUnderQualifier(qualifier, key, value, error)) return nil;
+    return CSQualified(qualifier, [value copy]);
+}
+
+/// Keys in code-point order: their UTF-8 bytes, the order Lean's String < uses.
+static NSArray<NSString *> *CSSortedKeys(NSArray<NSString *> *keys) {
+    return [keys sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
+        int c = strcmp(a.UTF8String, b.UTF8String);
+        return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+    }];
+}
+
 @interface CSTaggedUrnCoordinateDelta ()
 @property (nonatomic, strong) NSString *mutablePrefix;
-@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *mutableRemoved;
-@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *mutableAdded;
+@property (nonatomic, strong) NSDictionary<NSString *, CSTagConstraint *> *mutableRemoved;
+@property (nonatomic, strong) NSDictionary<NSString *, CSTagConstraint *> *mutableAdded;
 @property (nonatomic, assign) CSTaggedUrnRelationKind mutableRelationKind;
 @end
 
 @implementation CSTaggedUrnCoordinateDelta
 
 - (instancetype)initWithPrefix:(NSString *)prefix
-                       removed:(NSDictionary<NSString *,NSString *> *)removed
-                         added:(NSDictionary<NSString *,NSString *> *)added
+                       removed:(NSDictionary<NSString *, CSTagConstraint *> *)removed
+                         added:(NSDictionary<NSString *, CSTagConstraint *> *)added
                   relationKind:(CSTaggedUrnRelationKind)relationKind {
     if (self = [super init]) {
         _mutablePrefix = [prefix lowercaseString];
@@ -118,11 +379,11 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     return self.mutablePrefix;
 }
 
-- (NSDictionary<NSString *,NSString *> *)removed {
+- (NSDictionary<NSString *, CSTagConstraint *> *)removed {
     return self.mutableRemoved;
 }
 
-- (NSDictionary<NSString *,NSString *> *)added {
+- (NSDictionary<NSString *, CSTagConstraint *> *)added {
     return self.mutableAdded;
 }
 
@@ -146,9 +407,14 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
-    NSString *prefix = [coder decodeObjectOfClass:[NSString class] forKey:@"prefix"] ?: @"";
-    NSDictionary *removed = [coder decodeObjectOfClass:[NSDictionary class] forKey:@"removed"] ?: @{};
-    NSDictionary *added = [coder decodeObjectOfClass:[NSDictionary class] forKey:@"added"] ?: @{};
+    NSSet *classes = [NSSet setWithObjects:[NSDictionary class], [NSString class], [CSTagConstraint class], nil];
+    NSString *prefix = [coder decodeObjectOfClass:[NSString class] forKey:@"prefix"];
+    NSDictionary *removed = [coder decodeObjectOfClasses:classes forKey:@"removed"];
+    NSDictionary *added = [coder decodeObjectOfClasses:classes forKey:@"added"];
+    if (prefix == nil || removed == nil || added == nil) {
+        [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidFormat, @"a coordinate delta needs its prefix, removed and added")];
+        return nil;
+    }
     CSTaggedUrnRelationKind relationKind = [coder decodeIntegerForKey:@"relationKind"];
     return [self initWithPrefix:prefix removed:removed added:added relationKind:relationKind];
 }
@@ -183,41 +449,21 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     return self.mutablePrefix;
 }
 
-- (NSDictionary<NSString *, NSString *> *)tags {
-    return [self.mutableTags copy];
+- (NSDictionary<NSString *, CSTagConstraint *> *)tags {
+    return self.storedTags;
 }
 
 #pragma mark - Helper Methods
 
-+ (BOOL)isValidKeyChar:(unichar)c {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-           c == '_' || c == '-' || c == '/' || c == ':' || c == '.';
-}
-
-+ (BOOL)isValidUnquotedValueChar:(unichar)c {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-           c == '_' || c == '-' || c == '/' || c == ':' || c == '.' || c == '*' || c == '?' || c == '!';
-}
-
-+ (BOOL)isPurelyNumeric:(NSString *)s {
-    if (s.length == 0) return NO;
-    NSCharacterSet *numericSet = [NSCharacterSet decimalDigitCharacterSet];
-    NSCharacterSet *nonNumericSet = [numericSet invertedSet];
-    return [s rangeOfCharacterFromSet:nonNumericSet].location == NSNotFound;
-}
-
 + (BOOL)needsQuoting:(NSString *)value {
+    NSCharacterSet *uppercase = [NSCharacterSet uppercaseLetterCharacterSet];
     for (NSUInteger i = 0; i < value.length; i++) {
         unichar c = [value characterAtIndex:i];
-        if (c == ';' || c == '=' || c == '"' || c == '\\' || c == ' ') {
-            return YES;
-        }
-        // Check for uppercase letter
-        if (c >= 'A' && c <= 'Z') {
+        if (!CSIsValidUnquotedValueChar(c) || [uppercase characterIsMember:c]) {
             return YES;
         }
     }
-    return NO;
+    return [value hasPrefix:@"*"] || [value hasPrefix:@"?"] || [value hasPrefix:@"!"];
 }
 
 + (NSString *)quoteValue:(NSString *)value {
@@ -233,15 +479,33 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     return result;
 }
 
+/// A value as it is written: bare, or quoted when it must be.
++ (NSString *)writeValue:(NSString *)value {
+    return [self needsQuoting:value] ? [self quoteValue:value] : value;
+}
+
 #pragma mark - Parsing
+
+/// Inserts the tag being parsed (nil when making its constraint failed, with the error set),
+/// refusing a key given twice, and readies the parser for the next tag.
+static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags, NSMutableString *key,
+                        NSMutableString *value, char *qualifier, CSTagConstraint * _Nullable constraint,
+                        NSError **error) {
+    if (constraint == nil) return NO;
+    if (tags[key] != nil) {
+        if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateKey, [NSString stringWithFormat:@"Duplicate tag key: %@", key]);
+        return NO;
+    }
+    tags[[key copy]] = constraint;
+    [key setString:@""];
+    [value setString:@""];
+    *qualifier = 0;
+    return YES;
+}
 
 + (nullable instancetype)fromString:(NSString *)string error:(NSError **)error {
     if (!string || string.length == 0) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorInvalidFormat
-                                     userInfo:@{NSLocalizedDescriptionKey: @"URN identifier cannot be empty"}];
-        }
+        if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidFormat, @"URN identifier cannot be empty");
         return nil;
     }
 
@@ -249,9 +513,8 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     NSString *trimmed = [string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (![string isEqualToString:trimmed]) {
         if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorWhitespaceInInput
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"URN has leading or trailing whitespace: '%@'", string]}];
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorWhitespaceInInput,
+                [NSString stringWithFormat:@"URN has leading or trailing whitespace: '%@'", string]);
         }
         return nil;
     }
@@ -259,30 +522,23 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     // Find the prefix (everything before the first colon)
     NSRange colonRange = [string rangeOfString:@":"];
     if (colonRange.location == NSNotFound) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorMissingPrefix
-                                     userInfo:@{NSLocalizedDescriptionKey: @"URN must have a prefix followed by ':'"}];
-        }
+        if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorMissingPrefix, @"URN must have a prefix followed by ':'");
         return nil;
     }
 
     if (colonRange.location == 0) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorEmptyPrefix
-                                     userInfo:@{NSLocalizedDescriptionKey: @"URN prefix cannot be empty"}];
-        }
+        if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyPrefix, @"URN prefix cannot be empty");
         return nil;
     }
 
-    NSString *prefix = [[string substringToIndex:colonRange.location] lowercaseString];
+    NSString *prefix = CSIdentifier(@"prefix", [string substringToIndex:colonRange.location], error);
+    if (prefix == nil) return nil;
     NSString *tagsPart = [string substringFromIndex:colonRange.location + 1];
-    NSMutableDictionary<NSString *, NSString *> *tags = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, CSTagConstraint *> *tags = [NSMutableDictionary dictionary];
 
     // Handle empty tagged URN (prefix: with no tags or just semicolon)
     if (tagsPart.length == 0 || [tagsPart isEqualToString:@";"]) {
-        return [self fromPrefix:prefix tagsInternal:tags error:error];
+        return [[CSTaggedUrn alloc] initWithPrefix:prefix tags:tags];
     }
 
     CSParseState state = CSParseStateExpectingKey;
@@ -291,7 +547,7 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     NSUInteger pos = 0;
     // qualifier: 0 means none, '?' or '!' means a prefix or infix
     // qualifier has been seen for the tag currently being parsed.
-    // Reset to 0 on each finish_tag.
+    // Reset to 0 on each finished tag.
     char qualifier = 0;
 
     while (pos < tagsPart.length) {
@@ -308,14 +564,13 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
                 } else if (c == '!') {
                     qualifier = '!';
                     state = CSParseStateAfterPrefixBang;
-                } else if ([self isValidKeyChar:c]) {
-                    [currentKey appendFormat:@"%c", tolower(c)];
+                } else if (CSIsIdentifierStart(c)) {
+                    [currentKey appendFormat:@"%C", CSAsciiLower(c)];
                     state = CSParseStateInKey;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"invalid character '%C' at position %lu", c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"invalid character '%C' at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -323,14 +578,13 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
 
             case CSParseStateAfterPrefixQuestion:
             case CSParseStateAfterPrefixBang:
-                if ([self isValidKeyChar:c]) {
-                    [currentKey appendFormat:@"%c", tolower(c)];
+                if (CSIsIdentifierStart(c)) {
+                    [currentKey appendFormat:@"%C", CSAsciiLower(c)];
                     state = CSParseStateInKey;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"expected key character after '%c' qualifier, got '%C' at position %lu", qualifier, c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"expected key character after '%c' qualifier, got '%C' at position %lu", qualifier, c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -338,61 +592,26 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
 
             case CSParseStateInKey:
                 if (c == '=') {
-                    if (currentKey.length == 0) {
-                        if (error) {
-                            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                         code:CSTaggedUrnErrorEmptyTag
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"empty key"}];
-                        }
-                        return nil;
-                    }
                     state = CSParseStateExpectingValue;
-                } else if (c == '?') {
+                } else if (c == '?' || c == '!') {
                     if (qualifier != 0) {
                         if (error) {
-                            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                         code:CSTaggedUrnErrorInvalidCharacter
-                                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"duplicate qualifier '?' at position %lu: prefix and infix qualifiers cannot be combined on key '%@'", (unsigned long)pos, currentKey]}];
+                            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                                [NSString stringWithFormat:@"duplicate qualifier '%C' at position %lu: prefix and infix qualifiers cannot be combined on key '%@'", c, (unsigned long)pos, currentKey]);
                         }
                         return nil;
                     }
-                    qualifier = '?';
-                    state = CSParseStateInKeyAfterQuestion;
-                } else if (c == '!') {
-                    if (qualifier != 0) {
-                        if (error) {
-                            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                         code:CSTaggedUrnErrorInvalidCharacter
-                                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"duplicate qualifier '!' at position %lu: prefix and infix qualifiers cannot be combined on key '%@'", (unsigned long)pos, currentKey]}];
-                        }
-                        return nil;
-                    }
-                    qualifier = '!';
-                    state = CSParseStateInKeyAfterBang;
+                    qualifier = (char)c;
+                    state = c == '?' ? CSParseStateInKeyAfterQuestion : CSParseStateInKeyAfterBang;
                 } else if (c == ';') {
-                    if (currentKey.length == 0) {
-                        if (error) {
-                            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                         code:CSTaggedUrnErrorEmptyTag
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"empty key"}];
-                        }
-                        return nil;
-                    }
-                    [currentValue setString:CSCanonicalNoValueForQualifier(qualifier)];
-                    if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    [currentKey setString:@""];
-                    [currentValue setString:@""];
-                    qualifier = 0;
+                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
                     state = CSParseStateExpectingKey;
-                } else if ([self isValidKeyChar:c]) {
-                    [currentKey appendFormat:@"%c", tolower(c)];
+                } else if (CSIsValidKeyChar(c)) {
+                    [currentKey appendFormat:@"%C", CSAsciiLower(c)];
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"invalid character '%C' in key at position %lu", c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"invalid character '%C' in key at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -403,19 +622,12 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
                 if (c == '=') {
                     state = CSParseStateExpectingValue;
                 } else if (c == ';') {
-                    [currentValue setString:CSCanonicalNoValueForQualifier(qualifier)];
-                    if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    [currentKey setString:@""];
-                    [currentValue setString:@""];
-                    qualifier = 0;
+                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
                     state = CSParseStateExpectingKey;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"expected '=' or ';' after '%@%c' suffix qualifier, got '%C' at position %lu", currentKey, qualifier, c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"expected '=' or ';' after '%@%c' suffix qualifier, got '%C' at position %lu", currentKey, qualifier, c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -426,19 +638,17 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
                     state = CSParseStateInQuotedValue;
                 } else if (c == ';') {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorEmptyTag
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"empty value for key '%@'", currentKey]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
+                            [NSString stringWithFormat:@"empty value for key '%@'", currentKey]);
                     }
                     return nil;
-                } else if ([self isValidUnquotedValueChar:c]) {
-                    [currentValue appendFormat:@"%c", tolower(c)];
+                } else if (CSIsValidUnquotedValueChar(c)) {
+                    [currentValue appendFormat:@"%C", CSAsciiLower(c)];
                     state = CSParseStateInUnquotedValue;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"invalid character '%C' in value at position %lu", c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"invalid character '%C' in value at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -446,23 +656,14 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
 
             case CSParseStateInUnquotedValue:
                 if (c == ';') {
-                    if (![self canonicalizeValueWithQualifier:qualifier key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    [currentKey setString:@""];
-                    [currentValue setString:@""];
-                    qualifier = 0;
+                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, NO, currentKey, currentValue, error), error)) return nil;
                     state = CSParseStateExpectingKey;
-                } else if ([self isValidUnquotedValueChar:c]) {
-                    [currentValue appendFormat:@"%c", tolower(c)];
+                } else if (CSIsValidUnquotedValueChar(c)) {
+                    [currentValue appendFormat:@"%C", CSAsciiLower(c)];
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"invalid character '%C' in unquoted value at position %lu", c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"invalid character '%C' in unquoted value at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -484,9 +685,8 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
                     state = CSParseStateInQuotedValue;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidEscapeSequence
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"invalid escape sequence at position %lu (only \\\" and \\\\ allowed)", (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidEscapeSequence,
+                            [NSString stringWithFormat:@"invalid escape sequence at position %lu (only \\\" and \\\\ allowed)", (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -494,21 +694,12 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
 
             case CSParseStateExpectingSemiOrEnd:
                 if (c == ';') {
-                    if (![self canonicalizeValueWithQualifier:qualifier key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                        return nil;
-                    }
-                    [currentKey setString:@""];
-                    [currentValue setString:@""];
-                    qualifier = 0;
+                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, YES, currentKey, currentValue, error), error)) return nil;
                     state = CSParseStateExpectingKey;
                 } else {
                     if (error) {
-                        *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                     code:CSTaggedUrnErrorInvalidCharacter
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"expected ';' or end after quoted value, got '%C' at position %lu", c, (unsigned long)pos]}];
+                        *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                            [NSString stringWithFormat:@"expected ';' or end after quoted value, got '%C' at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -521,191 +712,78 @@ static BOOL CSModelRelation(int32_t (*relation)(const lungo_value *, const lungo
     // Handle end of input
     switch (state) {
         case CSParseStateInUnquotedValue:
+            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, NO, currentKey, currentValue, error), error)) return nil;
+            break;
         case CSParseStateExpectingSemiOrEnd:
-            if (![self canonicalizeValueWithQualifier:qualifier key:currentKey value:currentValue error:error]) {
-                return nil;
-            }
-            if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                return nil;
-            }
+            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, YES, currentKey, currentValue, error), error)) return nil;
             break;
         case CSParseStateExpectingKey:
             break;
         case CSParseStateInQuotedValue:
         case CSParseStateInQuotedValueEscape:
             if (error) {
-                *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                             code:CSTaggedUrnErrorUnterminatedQuote
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"unterminated quote at position %lu", (unsigned long)pos]}];
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorUnterminatedQuote,
+                    [NSString stringWithFormat:@"unterminated quote at position %lu", (unsigned long)pos]);
             }
             return nil;
         case CSParseStateAfterPrefixQuestion:
         case CSParseStateAfterPrefixBang:
             if (error) {
-                *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                             code:CSTaggedUrnErrorEmptyTag
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"qualifier '%c' at end of input has no key", qualifier]}];
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
+                    [NSString stringWithFormat:@"qualifier '%c' at end of input has no key", qualifier]);
             }
             return nil;
         case CSParseStateInKey:
-            if (currentKey.length == 0) {
-                if (error) {
-                    *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                                 code:CSTaggedUrnErrorEmptyTag
-                                             userInfo:@{NSLocalizedDescriptionKey: @"empty key"}];
-                }
-                return nil;
-            }
-            [currentValue setString:CSCanonicalNoValueForQualifier(qualifier)];
-            if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                return nil;
-            }
-            break;
         case CSParseStateInKeyAfterQuestion:
         case CSParseStateInKeyAfterBang:
-            [currentValue setString:CSCanonicalNoValueForQualifier(qualifier)];
-            if (![self finishTag:tags key:currentKey value:currentValue error:error]) {
-                return nil;
-            }
+            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
             break;
         case CSParseStateExpectingValue:
             if (error) {
-                *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                             code:CSTaggedUrnErrorEmptyTag
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"empty value for key '%@'", currentKey]}];
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
+                    [NSString stringWithFormat:@"empty value for key '%@'", currentKey]);
             }
             return nil;
     }
 
-    return [self fromPrefix:prefix tagsInternal:tags error:error];
+    return [[CSTaggedUrn alloc] initWithPrefix:prefix tags:tags];
 }
 
-// Helper: canonical stored value for a value-less tag, given its
-// qualifier (0, '?' or '!').
-static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
-    switch (qualifier) {
-        case 0:   return @"*";
-        case '?': return @"?";
-        case '!': return @"!";
-    }
-    [NSException raise:NSInternalInconsistencyException
-                format:@"invalid qualifier %d", qualifier];
-    return nil;
-}
-
-// Helper: canonicalize a parsed value into the stored form per the
-// qualifier. None: keep value. '?': encode as "?=v". '!': encode as
-// "!=v". Combining a qualifier with a sigil-only value (`*`, `?`,
-// `!`) is rejected.
-+ (BOOL)canonicalizeValueWithQualifier:(char)qualifier
-                                   key:(NSString *)key
-                                 value:(NSMutableString *)value
-                                 error:(NSError **)error {
-    if (qualifier == 0) {
-        return YES;
-    }
-    if ([value isEqualToString:@"*"] ||
-        [value isEqualToString:@"?"] ||
-        [value isEqualToString:@"!"]) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorInvalidCharacter
-                                     userInfo:@{NSLocalizedDescriptionKey:
-                [NSString stringWithFormat:
-                 @"qualifier '%c' on key '%@' cannot combine with sigil value '%@': "
-                  "use a real value or drop the qualifier",
-                 qualifier, key, value]}];
-        }
-        return NO;
-    }
-    NSString *canonical = [NSString stringWithFormat:@"%c=%@", qualifier, value];
-    [value setString:canonical];
-    return YES;
-}
-
-+ (BOOL)finishTag:(NSMutableDictionary *)tags key:(NSString *)key value:(NSString *)value error:(NSError **)error {
-    if (key.length == 0) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorEmptyTag
-                                     userInfo:@{NSLocalizedDescriptionKey: @"empty key"}];
-        }
-        return NO;
-    }
-    if (value.length == 0) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorEmptyTag
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"empty value for key '%@'", key]}];
-        }
-        return NO;
-    }
-
-    // Check for duplicate keys
-    if (tags[key] != nil) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorDuplicateKey
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Duplicate tag key: %@", key]}];
-        }
-        return NO;
-    }
-
-    // Validate key cannot be purely numeric
-    if ([self isPurelyNumeric:key]) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorNumericKey
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Tag key cannot be purely numeric: %@", key]}];
-        }
-        return NO;
-    }
-
-    // Copy strings to prevent mutation after storage
-    tags[[key copy]] = [value copy];
-    return YES;
-}
-
-+ (nullable instancetype)fromPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, NSString *> *)tags error:(NSError **)error {
-    if (!tags) {
-        tags = @{};
-    }
-
-    // Normalize keys to lowercase and validate each authored tag through
-    // the same key/value rules the parser applies, so programmatic
-    // construction cannot bypass numeric-key, duplicate-key, or empty-value
-    // checks.
-    NSMutableDictionary<NSString *, NSString *> *validatedTags = [NSMutableDictionary dictionary];
++ (nullable instancetype)fromPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, CSTagConstraint *> *)tags error:(NSError **)error {
+    NSString *lower = CSIdentifier(@"prefix", prefix, error);
+    if (lower == nil) return nil;
+    NSMutableDictionary<NSString *, CSTagConstraint *> *validated = [NSMutableDictionary dictionary];
     for (NSString *key in tags) {
-        NSString *value = tags[key];
-        NSString *keyLower = [key lowercaseString];
-        if (![self finishTag:validatedTags key:keyLower value:value ?: @"" error:error]) {
+        NSString *k = CSIdentifier(@"key", key, error);
+        if (k == nil) return nil;
+        if (!CSCheckConstraint(k, tags[key], error)) return nil;
+        if (validated[k] != nil) {
+            if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateKey, [NSString stringWithFormat:@"Duplicate tag key: %@", k]);
             return nil;
         }
+        validated[k] = tags[key];
     }
-
-    return [self fromPrefix:prefix tagsInternal:validatedTags error:error];
-}
-
-+ (nullable instancetype)fromPrefix:(NSString *)prefix tagsInternal:(NSDictionary<NSString *, NSString *> *)tags error:(NSError **)error {
-    return [[CSTaggedUrn alloc] initWithPrefix:[prefix lowercaseString] tags:tags];
+    return [[CSTaggedUrn alloc] initWithPrefix:lower tags:validated];
 }
 
 /// The one way a CSTaggedUrn is made: the fields and the model's value, together, from the same
-/// tags. The model refuses keys that are not strictly increasing; the keys are sorted by their
-/// UTF-8 bytes, which is the code-point order Lean's String < uses, so a refusal is a broken
-/// invariant.
-- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, NSString *> *)tags {
+/// tags, which every caller has already checked. The model refuses keys that are not strictly
+/// increasing; the keys are sorted by their UTF-8 bytes, which is the code-point order Lean's
+/// String < uses, so a refusal is a broken invariant.
+- (instancetype)initWithPrefix:(NSString *)prefix tags:(NSDictionary<NSString *, CSTagConstraint *> *)tags {
     if (self = [super init]) {
         _mutablePrefix = [prefix copy];
-        _mutableTags = [tags mutableCopy];
-        NSArray<NSString *> *keys = [tags.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
-            int c = strcmp(a.UTF8String, b.UTF8String);
-            return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
-        }];
+        _storedTags = [tags copy];
+        NSArray<NSString *> *keys = CSSortedKeys(tags.allKeys);
         lungo_value **pairs = keys.count ? calloc(keys.count, sizeof(lungo_value *)) : NULL;
         for (NSUInteger i = 0; i < keys.count; i++) {
-            pairs[i] = lungo_value_prod(CSModelString(keys[i]), CSConstraintOf(tags[keys[i]]));
+            CSTagConstraint *c = tags[keys[i]];
+            if (c.kind == CSTagConstraintKindMissing) {
+                @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                               reason:[NSString stringWithFormat:@"tagged-urn: key '%@' stored as missing; a key with no constraint is omitted", keys[i]]
+                                             userInfo:nil];
+            }
+            pairs[i] = lungo_value_prod(CSModelString(keys[i]), CSModelConstraint(c));
         }
         lungo_value *list = lungo_value_list(pairs, keys.count);
         free(pairs);
@@ -733,86 +811,59 @@ static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
     lungo_value_free(_formal);
 }
 
+- (instancetype)init {
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:@"tagged-urn: a CSTaggedUrn is made by fromString:error: or fromPrefix:tags:error:"
+                                 userInfo:nil];
+}
+
 - (const lungo_value *)formalValue {
     return _formal;
 }
 
-+ (instancetype)emptyWithPrefix:(NSString *)prefix {
-    return [self fromPrefix:prefix tagsInternal:@{} error:nil];
++ (nullable instancetype)emptyWithPrefix:(NSString *)prefix error:(NSError **)error {
+    return [self fromPrefix:prefix tags:@{} error:error];
 }
 
-- (instancetype)init {
-    return [self initWithPrefix:@"" tags:@{}];
+- (nullable CSTagConstraint *)getTag:(NSString *)key {
+    return self.storedTags[[key lowercaseString]];
 }
 
-- (nullable NSString *)getTag:(NSString *)key {
-    return self.mutableTags[[key lowercaseString]];
+- (CSTagConstraint *)constraintForKey:(NSString *)key {
+    CSTagConstraint *c = self.storedTags[[key lowercaseString]];
+    return c ?: [CSTagConstraint missing];
 }
 
 - (BOOL)hasTag:(NSString *)key withValue:(NSString *)value {
-    NSString *tagValue = self.mutableTags[[key lowercaseString]];
-    // Case-sensitive value comparison
-    return tagValue && [tagValue isEqualToString:value];
+    return [[self getTag:key] isEqual:[CSTagConstraint exact:value]];
 }
 
 - (BOOL)hasMarkerTag:(NSString *)tagName {
-    NSString *tagValue = self.mutableTags[[tagName lowercaseString]];
-    return tagValue && [tagValue isEqualToString:@"*"];
+    return [self getTag:tagName].kind == CSTagConstraintKindPresent;
 }
 
-- (CSTaggedUrn *)withTag:(NSString *)key value:(NSString *)value {
-    NSMutableDictionary *newTags = [self.mutableTags mutableCopy];
-    // Key lowercase, value preserved
-    newTags[[key lowercaseString]] = value;
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:nil];
+- (nullable CSTaggedUrn *)withTag:(NSString *)key constraint:(CSTagConstraint *)constraint error:(NSError **)error {
+    NSString *k = CSIdentifier(@"key", key, error);
+    if (k == nil) return nil;
+    if (!CSCheckConstraint(k, constraint, error)) return nil;
+    NSMutableDictionary *newTags = [self.storedTags mutableCopy];
+    newTags[k] = constraint;
+    return [[CSTaggedUrn alloc] initWithPrefix:self.mutablePrefix tags:newTags];
 }
 
 - (CSTaggedUrn *)withoutTag:(NSString *)key {
-    NSMutableDictionary *newTags = [self.mutableTags mutableCopy];
+    NSMutableDictionary *newTags = [self.storedTags mutableCopy];
     [newTags removeObjectForKey:[key lowercaseString]];
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:nil];
+    return [[CSTaggedUrn alloc] initWithPrefix:self.mutablePrefix tags:newTags];
 }
 
-// One of the seven canonical forms a tag value can take (six
-// explicit + missing). Used by the matcher and specificity scorer.
-typedef NS_ENUM(NSInteger, CSFormKind) {
-    CSFormMissing,
-    CSFormNoConstraint,         // "?"
-    CSFormAbsentOrNotValue,     // "?=v"
-    CSFormMustHaveAny,          // "*"
-    CSFormPresentNotValue,      // "!=v"
-    CSFormExact,                // exact "v"
-    CSFormMustNotHave,          // "!"
-};
-
-// Classify a stored value into (kind, raw value). raw is the inner
-// v for ?=v and !=v, the literal value for exact, and nil for the
-// sigil-only forms.
-static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullable * _Nullable rawOut) {
-    if (rawOut) *rawOut = nil;
-    if (value == nil) return CSFormMissing;
-    if ([value isEqualToString:@"?"]) return CSFormNoConstraint;
-    if ([value isEqualToString:@"*"]) return CSFormMustHaveAny;
-    if ([value isEqualToString:@"!"]) return CSFormMustNotHave;
-    if ([value hasPrefix:@"?="]) {
-        if (rawOut) *rawOut = [value substringFromIndex:2];
-        return CSFormAbsentOrNotValue;
-    }
-    if ([value hasPrefix:@"!="]) {
-        if (rawOut) *rawOut = [value substringFromIndex:2];
-        return CSFormPresentNotValue;
-    }
-    if (rawOut) *rawOut = value;
-    return CSFormExact;
-}
-
-/// Check if instance value matches pattern constraint (nil for a key the URN omits), as the
-/// model decides it: every form has one meaning — the set of states the key may be in — and
-/// the instance satisfies the pattern when every state it allows, the pattern allows too
-/// (tagMatch_iff_allows in ../formal).
-+ (BOOL)valuesMatchInst:(NSString *)inst patt:(NSString *)patt {
-    lungo_value *i = CSConstraintOf(inst);
-    lungo_value *p = CSConstraintOf(patt);
+/// Whether the instance's constraint satisfies the pattern's at one key (missing for a key a
+/// URN omits), as the model decides it: every form has one meaning — the set of states the key
+/// may be in — and the instance satisfies the pattern when every state it allows, the pattern
+/// allows too (tagMatch_iff_allows in ../formal).
++ (BOOL)valuesMatchInst:(CSTagConstraint *)inst patt:(CSTagConstraint *)patt {
+    lungo_value *i = CSModelConstraint(inst);
+    lungo_value *p = CSModelConstraint(patt);
     lungo_value *result = NULL;
     lungo_error *error = NULL;
     int32_t status = tagged_urn_formal_values_match(i, p, &result, &error);
@@ -887,11 +938,12 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
 }
 
 /// The most specific URN every one of `urns` conforms to, made by the model
-/// (`TaggedUrn.Exec.leastUpperBound`): its tags come back as stored values.
+/// (`TaggedUrn.Exec.leastUpperBound`): its tags come back as constraints, none of them missing.
 + (nullable instancetype)leastUpperBoundWithPrefix:(NSString *)prefix
                                               urns:(NSArray<CSTaggedUrn *> *)urns
                                              error:(NSError **)error {
-    NSString *lower = [prefix lowercaseString];
+    NSString *lower = CSIdentifier(@"prefix", prefix, error);
+    if (lower == nil) return nil;
     lungo_value **handles = urns.count ? calloc(urns.count, sizeof(lungo_value *)) : NULL;
     for (NSUInteger i = 0; i < urns.count; i++) {
         handles[i] = lungo_value_clone(urns[i]->_formal);
@@ -922,14 +974,10 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
                                        reason:[NSString stringWithFormat:@"tagged-urn: the model made no bound of URNs that all have the prefix %@", lower]
                                      userInfo:nil];
     }
-    NSMutableDictionary<NSString *, NSString *> *bound = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, CSTagConstraint *> *bound = [NSMutableDictionary dictionary];
     for (size_t i = 0; i < lungo_value_count(tags); i++) {
         const lungo_value *pair = lungo_value_item(tags, i);
-        size_t keyLength = 0, valueLength = 0;
-        const char *key = lungo_value_get_string(lungo_value_first(pair), &keyLength);
-        const char *value = lungo_value_get_string(lungo_value_second(pair), &valueLength);
-        bound[[[NSString alloc] initWithBytes:key length:keyLength encoding:NSUTF8StringEncoding]] =
-            [[NSString alloc] initWithBytes:value length:valueLength encoding:NSUTF8StringEncoding];
+        bound[CSStringOfModel(lungo_value_first(pair))] = CSConstraintOfModel(lungo_value_second(pair));
     }
     lungo_value_free(made);
     return [[CSTaggedUrn alloc] initWithPrefix:lower tags:bound];
@@ -981,20 +1029,20 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         return nil;
     }
 
-    NSMutableDictionary<NSString *, NSString *> *removed = [NSMutableDictionary dictionary];
-    NSMutableDictionary<NSString *, NSString *> *added = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, CSTagConstraint *> *removed = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, CSTagConstraint *> *added = [NSMutableDictionary dictionary];
     NSMutableSet<NSString *> *allKeys = [NSMutableSet set];
-    [allKeys addObjectsFromArray:base.mutableTags.allKeys];
-    [allKeys addObjectsFromArray:self.mutableTags.allKeys];
+    [allKeys addObjectsFromArray:base.storedTags.allKeys];
+    [allKeys addObjectsFromArray:self.storedTags.allKeys];
 
     for (NSString *key in allKeys) {
-        NSString *baseValue = base.mutableTags[key];
-        NSString *targetValue = self.mutableTags[key];
+        CSTagConstraint *baseValue = base.storedTags[key];
+        CSTagConstraint *targetValue = self.storedTags[key];
         if (baseValue && !targetValue) {
             removed[key] = baseValue;
         } else if (!baseValue && targetValue) {
             added[key] = targetValue;
-        } else if (baseValue && targetValue && ![baseValue isEqualToString:targetValue]) {
+        } else if (baseValue && targetValue && ![baseValue isEqual:targetValue]) {
             removed[key] = baseValue;
             added[key] = targetValue;
         }
@@ -1042,18 +1090,18 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
         return nil;
     }
 
-    NSMutableDictionary<NSString *, NSString *> *newTags = [self.mutableTags mutableCopy];
+    NSMutableDictionary<NSString *, CSTagConstraint *> *newTags = [self.storedTags mutableCopy];
     for (NSString *key in delta.removed) {
-        NSString *expected = delta.removed[key];
-        NSString *current = newTags[key];
-        if (current && [current isEqualToString:expected]) {
+        CSTagConstraint *expected = delta.removed[key];
+        CSTagConstraint *current = newTags[key];
+        if (current && [current isEqual:expected]) {
             [newTags removeObjectForKey:key];
         }
     }
     for (NSString *key in delta.added) {
         newTags[key] = delta.added[key];
     }
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:error];
+    return [CSTaggedUrn fromPrefix:self.mutablePrefix tags:newTags error:error];
 }
 
 /// Core matching: does instance satisfy pattern's constraints? Decided by the model (refines,
@@ -1075,25 +1123,6 @@ static CSFormKind CSClassifyForm(NSString * _Nullable value, NSString * _Nullabl
     return NO;
 }
 
-/// Per-tag truth-table specificity score, applied uniformly to any
-/// stored tag value. Missing keys score 0; the caller filters them
-/// out before calling.
-///
-///   "?"          -> 0   (no constraint)
-///   starts "?="  -> 1   (absent or not v)
-///   "*"          -> 2   (must-have-any)
-///   starts "!="  -> 3   (present and not v)
-///   "!"          -> 5   (must-not-have)
-///   otherwise    -> 4   (exact value)
-NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
-    if ([value isEqualToString:@"?"]) return 0;
-    if ([value isEqualToString:@"*"]) return 2;
-    if ([value isEqualToString:@"!"]) return 5;
-    if ([value hasPrefix:@"?="]) return 1;
-    if ([value hasPrefix:@"!="]) return 3;
-    return 4;
-}
-
 /// Calculate specificity score, as the model computes it: the sum of per-tag truth-table scores.
 - (NSUInteger)specificity {
     lungo_value *result = NULL;
@@ -1110,9 +1139,8 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
     return (NSUInteger)score;
 }
 
-/// Get specificity as a tuple for tie-breaking, ordered from highest
-/// score to lowest:
-/// (must_not_have, exact, present_not_value, must_have_any, absent_or_not_value)
+/// How many tags fall into each non-zero form, from the highest score to the lowest:
+/// (absent, exact, presentNot, present, optionalNot)
 - (void)specificityTupleMustNotHave:(NSUInteger *)mustNotHave
                               exact:(NSUInteger *)exact
                    presentNotValue:(NSUInteger *)presentNotValue
@@ -1123,15 +1151,18 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
     *presentNotValue = 0;
     *mustHaveAny = 0;
     *absentOrNotValue = 0;
-    for (NSString *value in self.mutableTags.allValues) {
-        switch (CSClassifyForm(value, NULL)) {
-            case CSFormMustNotHave:        (*mustNotHave)++; break;
-            case CSFormExact:              (*exact)++; break;
-            case CSFormPresentNotValue:    (*presentNotValue)++; break;
-            case CSFormMustHaveAny:        (*mustHaveAny)++; break;
-            case CSFormAbsentOrNotValue:   (*absentOrNotValue)++; break;
-            case CSFormMissing:
-            case CSFormNoConstraint:       break;
+    for (CSTagConstraint *c in self.storedTags.allValues) {
+        switch (c.kind) {
+            case CSTagConstraintKindAbsent:        (*mustNotHave)++; break;
+            case CSTagConstraintKindExact:         (*exact)++; break;
+            case CSTagConstraintKindPresentNot:    (*presentNotValue)++; break;
+            case CSTagConstraintKindPresent:       (*mustHaveAny)++; break;
+            case CSTagConstraintKindOptionalNot:   (*absentOrNotValue)++; break;
+            case CSTagConstraintKindUnconstrained: break;
+            case CSTagConstraintKindMissing:
+                @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                               reason:@"tagged-urn: a stored tag is missing"
+                                             userInfo:nil];
         }
     }
 }
@@ -1160,22 +1191,25 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
 }
 
 - (CSTaggedUrn *)withWildcardTag:(NSString *)key {
-    if (self.mutableTags[[key lowercaseString]]) {
-        return [self withTag:key value:@"*"];
+    NSString *normalizedKey = [key lowercaseString];
+    if (self.storedTags[normalizedKey] == nil) {
+        return self;
     }
-    return self;
+    NSMutableDictionary *newTags = [self.storedTags mutableCopy];
+    newTags[normalizedKey] = [CSTagConstraint present];
+    return [[CSTaggedUrn alloc] initWithPrefix:self.mutablePrefix tags:newTags];
 }
 
 - (CSTaggedUrn *)subset:(NSArray<NSString *> *)keys {
     NSMutableDictionary *newTags = [NSMutableDictionary dictionary];
     for (NSString *key in keys) {
         NSString *normalizedKey = [key lowercaseString];
-        NSString *value = self.mutableTags[normalizedKey];
+        CSTagConstraint *value = self.storedTags[normalizedKey];
         if (value) {
             newTags[normalizedKey] = value;
         }
     }
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:nil];
+    return [[CSTaggedUrn alloc] initWithPrefix:self.mutablePrefix tags:newTags];
 }
 
 - (nullable CSTaggedUrn *)merge:(CSTaggedUrn *)other error:(NSError **)error {
@@ -1197,60 +1231,47 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
         return nil;
     }
 
-    NSMutableDictionary *newTags = [self.mutableTags mutableCopy];
-    for (NSString *key in other.mutableTags) {
-        newTags[key] = other.mutableTags[key];
+    NSMutableDictionary *newTags = [self.storedTags mutableCopy];
+    for (NSString *key in other.storedTags) {
+        newTags[key] = other.storedTags[key];
     }
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:newTags error:nil];
+    return [[CSTaggedUrn alloc] initWithPrefix:self.mutablePrefix tags:newTags];
 }
 
+/// The canonical string: the prefix, `:`, and the tags in key order joined by `;`. Each
+/// constraint is written in its canonical form — present `k`, unconstrained `?k`, absent `!k`,
+/// optionalNot `k?=v`, presentNot `k!=v`, exact `k=v` — with a value quoted only when it must
+/// be to read back as itself (exact `*` prints `k="*"`).
 - (NSString *)toString {
-    if (self.mutableTags.count == 0) {
-        return [NSString stringWithFormat:@"%@:", self.mutablePrefix];
-    }
-
-    // Sort keys for canonical representation
-    NSArray<NSString *> *sortedKeys = [self.mutableTags.allKeys sortedArrayUsingSelector:@selector(compare:)];
-
-    // Build canonical serialization. Stored values map to:
-    //   "*"           -> "k"           (bare key, must-have-any)
-    //   "?"           -> "?k"          (prefix qualifier, no constraint)
-    //   "!"           -> "!k"          (prefix qualifier, must-not-have)
-    //   "?=v"         -> "k?=v"        (infix qualifier, absent or not v)
-    //   "!=v"         -> "k!=v"        (infix qualifier, present and not v)
-    //   exact "v"     -> "k=v" or "k=\"v\"" (with quoting if needed)
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
-    for (NSString *key in sortedKeys) {
-        NSString *value = self.mutableTags[key];
-        if ([value isEqualToString:@"*"]) {
-            [parts addObject:key];
-        } else if ([value isEqualToString:@"?"]) {
-            [parts addObject:[NSString stringWithFormat:@"?%@", key]];
-        } else if ([value isEqualToString:@"!"]) {
-            [parts addObject:[NSString stringWithFormat:@"!%@", key]];
-        } else if ([value hasPrefix:@"?="]) {
-            NSString *raw = [value substringFromIndex:2];
-            if ([CSTaggedUrn needsQuoting:raw]) {
-                [parts addObject:[NSString stringWithFormat:@"%@?=%@", key, [CSTaggedUrn quoteValue:raw]]];
-            } else {
-                [parts addObject:[NSString stringWithFormat:@"%@?=%@", key, raw]];
-            }
-        } else if ([value hasPrefix:@"!="]) {
-            NSString *raw = [value substringFromIndex:2];
-            if ([CSTaggedUrn needsQuoting:raw]) {
-                [parts addObject:[NSString stringWithFormat:@"%@!=%@", key, [CSTaggedUrn quoteValue:raw]]];
-            } else {
-                [parts addObject:[NSString stringWithFormat:@"%@!=%@", key, raw]];
-            }
-        } else if ([CSTaggedUrn needsQuoting:value]) {
-            [parts addObject:[NSString stringWithFormat:@"%@=%@", key, [CSTaggedUrn quoteValue:value]]];
-        } else {
-            [parts addObject:[NSString stringWithFormat:@"%@=%@", key, value]];
+    for (NSString *key in CSSortedKeys(self.storedTags.allKeys)) {
+        CSTagConstraint *c = self.storedTags[key];
+        switch (c.kind) {
+            case CSTagConstraintKindPresent:
+                [parts addObject:key];
+                break;
+            case CSTagConstraintKindUnconstrained:
+                [parts addObject:[NSString stringWithFormat:@"?%@", key]];
+                break;
+            case CSTagConstraintKindAbsent:
+                [parts addObject:[NSString stringWithFormat:@"!%@", key]];
+                break;
+            case CSTagConstraintKindOptionalNot:
+                [parts addObject:[NSString stringWithFormat:@"%@?=%@", key, [CSTaggedUrn writeValue:c.value]]];
+                break;
+            case CSTagConstraintKindPresentNot:
+                [parts addObject:[NSString stringWithFormat:@"%@!=%@", key, [CSTaggedUrn writeValue:c.value]]];
+                break;
+            case CSTagConstraintKindExact:
+                [parts addObject:[NSString stringWithFormat:@"%@=%@", key, [CSTaggedUrn writeValue:c.value]]];
+                break;
+            case CSTagConstraintKindMissing:
+                @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                               reason:[NSString stringWithFormat:@"tagged-urn: key '%@' is stored as missing", key]
+                                             userInfo:nil];
         }
     }
-
-    NSString *tagsString = [parts componentsJoinedByString:@";"];
-    return [NSString stringWithFormat:@"%@:%@", self.mutablePrefix, tagsString];
+    return [NSString stringWithFormat:@"%@:%@", self.mutablePrefix, [parts componentsJoinedByString:@";"]];
 }
 
 - (NSString *)description {
@@ -1264,17 +1285,17 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
 
     CSTaggedUrn *other = (CSTaggedUrn *)object;
     return [self.mutablePrefix isEqualToString:other.mutablePrefix] &&
-           [self.mutableTags isEqualToDictionary:other.mutableTags];
+           [self.storedTags isEqualToDictionary:other.storedTags];
 }
 
 - (NSUInteger)hash {
-    return self.mutablePrefix.hash ^ self.mutableTags.hash;
+    return self.mutablePrefix.hash ^ self.storedTags.hash;
 }
 
 #pragma mark - NSCopying
 
 - (id)copyWithZone:(NSZone *)zone {
-    return [CSTaggedUrn fromPrefix:self.mutablePrefix tagsInternal:self.tags error:nil];
+    return self;
 }
 
 #pragma mark - NSSecureCoding
@@ -1285,13 +1306,25 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
 
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.mutablePrefix forKey:@"prefix"];
-    [coder encodeObject:self.mutableTags forKey:@"tags"];
+    [coder encodeObject:self.storedTags forKey:@"tags"];
 }
 
+/// Decoded data is checked as `fromPrefix:tags:error:` checks it: a coded URN that does not
+/// hold to the grammar fails to decode, saying why.
 - (instancetype)initWithCoder:(NSCoder *)coder {
     NSString *prefix = [coder decodeObjectOfClass:[NSString class] forKey:@"prefix"];
-    NSDictionary *tags = [coder decodeObjectOfClasses:[NSSet setWithObjects:[NSDictionary class], [NSString class], nil] forKey:@"tags"];
-    return [self initWithPrefix:prefix ?: @"" tags:tags ?: @{}];
+    NSDictionary *tags = [coder decodeObjectOfClasses:[NSSet setWithObjects:[NSDictionary class], [NSString class], [CSTagConstraint class], nil] forKey:@"tags"];
+    if (prefix == nil || tags == nil) {
+        [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidFormat, @"a coded tagged URN needs its prefix and tags")];
+        return nil;
+    }
+    NSError *error = nil;
+    CSTaggedUrn *checked = [CSTaggedUrn fromPrefix:prefix tags:tags error:&error];
+    if (checked == nil) {
+        [coder failWithError:error];
+        return nil;
+    }
+    return [self initWithPrefix:checked.mutablePrefix tags:checked.storedTags];
 }
 
 @end
@@ -1300,15 +1333,19 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
 
 @interface CSTaggedUrnBuilder ()
 @property (nonatomic, strong) NSString *builderPrefix;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *tags;
-@property (nonatomic, strong) NSError *buildError; // Track errors from tag()
+@property (nonatomic, strong) NSMutableDictionary<NSString *, CSTagConstraint *> *tags;
+/// The first refusal, returned by build.
+@property (nonatomic, strong) NSError *buildError;
 @end
 
 @implementation CSTaggedUrnBuilder
 
 + (instancetype)builderWithPrefix:(NSString *)prefix {
     CSTaggedUrnBuilder *builder = [[CSTaggedUrnBuilder alloc] init];
-    builder.builderPrefix = [prefix lowercaseString];
+    NSError *error = nil;
+    NSString *lower = CSIdentifier(@"prefix", prefix, &error);
+    builder.builderPrefix = lower ?: @"";
+    builder.buildError = error;
     return builder;
 }
 
@@ -1320,50 +1357,48 @@ NSUInteger CSTaggedUrnScoreTagValue(NSString *value) {
     return self;
 }
 
-- (CSTaggedUrnBuilder *)tag:(NSString *)key value:(NSString *)value {
-    // Validate empty value - matches Rust's Result error
-    if (value.length == 0) {
-        self.buildError = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                               code:CSTaggedUrnErrorEmptyTag
-                                           userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Empty value for key '%@' (use '*' for wildcard)", key]}];
-        return self; // Return self to maintain fluent API, but build() will fail
+- (CSTaggedUrnBuilder *)tag:(NSString *)key constraint:(CSTagConstraint *)constraint {
+    if (self.buildError) return self;
+    NSError *error = nil;
+    NSString *k = CSIdentifier(@"key", key, &error);
+    if (k == nil || !CSCheckConstraint(k, constraint, &error)) {
+        self.buildError = error;
+        return self;
     }
-
-    // Key lowercase, value preserved
-    self.tags[[key lowercaseString]] = value;
+    if (self.tags[k] != nil) {
+        self.buildError = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateKey, [NSString stringWithFormat:@"Duplicate tag key: %@", k]);
+        return self;
+    }
+    self.tags[k] = constraint;
     return self;
+}
+
+- (CSTaggedUrnBuilder *)tag:(NSString *)key value:(NSString *)value {
+    return [self tag:key constraint:[CSTagConstraint exact:value]];
 }
 
 - (CSTaggedUrnBuilder *)marker:(NSString *)key {
-    // Marker = wildcard-valued tag, stored as key="*", serialized as just
-    // the key.
-    self.tags[[key lowercaseString]] = @"*";
-    return self;
+    return [self tag:key constraint:[CSTagConstraint present]];
 }
 
 - (nullable CSTaggedUrn *)build:(NSError **)error {
-    // Check if tag() encountered an error
     if (self.buildError) {
-        if (error) {
-            *error = self.buildError;
-        }
+        if (error) *error = self.buildError;
         return nil;
     }
-
     if (self.tags.count == 0) {
-        if (error) {
-            *error = [NSError errorWithDomain:CSTaggedUrnErrorDomain
-                                         code:CSTaggedUrnErrorInvalidFormat
-                                     userInfo:@{NSLocalizedDescriptionKey: @"URN identifier cannot be empty"}];
-        }
+        if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidFormat, @"URN identifier cannot be empty");
         return nil;
     }
-
-    return [CSTaggedUrn fromPrefix:self.builderPrefix tagsInternal:self.tags error:error];
+    return [[CSTaggedUrn alloc] initWithPrefix:self.builderPrefix tags:self.tags];
 }
 
-- (CSTaggedUrn *)buildAllowEmpty {
-    return [CSTaggedUrn fromPrefix:self.builderPrefix tagsInternal:self.tags error:nil];
+- (nullable CSTaggedUrn *)buildAllowEmpty:(NSError **)error {
+    if (self.buildError) {
+        if (error) *error = self.buildError;
+        return nil;
+    }
+    return [[CSTaggedUrn alloc] initWithPrefix:self.builderPrefix tags:self.tags];
 }
 
 @end

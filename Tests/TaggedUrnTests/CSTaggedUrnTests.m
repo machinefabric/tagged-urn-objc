@@ -16,16 +16,16 @@
 // TEST0014: Tagged urn creation
 - (void)test0014_TaggedUrnCreation {
     NSError *error;
-    CSTaggedUrn *taggedUrn = [CSTaggedUrn fromString:@"cap:transform;format=json;data_processing" error:&error];
+    CSTaggedUrn *taggedUrn = [CSTaggedUrn fromString:@"cap:transform;format=json;data-processing" error:&error];
 
     XCTAssertNotNil(taggedUrn);
     XCTAssertNil(error);
 
     XCTAssertEqualObjects(taggedUrn.prefix, @"cap");
-    // data_processing is a valueless tag, stored as * (must-have-any)
-    XCTAssertEqualObjects([taggedUrn getTag:@"data_processing"], @"*");
+    // data-processing is a valueless tag, stored as present (must-have-any)
+    XCTAssertEqualObjects([taggedUrn getTag:@"data-processing"], [CSTagConstraint present]);
     XCTAssertTrue([taggedUrn hasMarkerTag:@"transform"]);
-    XCTAssertEqualObjects([taggedUrn getTag:@"format"], @"json");
+    XCTAssertEqualObjects([taggedUrn getTag:@"format"], [CSTagConstraint exact:@"json"]);
 }
 
 // TEST0015: Custom prefix
@@ -140,7 +140,7 @@
 
     XCTAssertNotNil(taggedUrn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([taggedUrn getTag:@"optimize"], @"*");
+    XCTAssertEqualObjects([taggedUrn getTag:@"optimize"], [CSTagConstraint present]);
     XCTAssertEqualObjects([taggedUrn toString], @"cap:optimize");
 }
 
@@ -278,11 +278,11 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:generate;ext=pdf;output=binary;target=thumbnail" error:&error];
 
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
-    XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
+    XCTAssertEqualObjects([urn getTag:@"target"], [CSTagConstraint exact:@"thumbnail"]);
+    XCTAssertEqualObjects([urn getTag:@"ext"], [CSTagConstraint exact:@"pdf"]);
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"binary"]);
 
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"binary"]);
 }
 
 // TEST0029: Builder
@@ -299,7 +299,7 @@
     XCTAssertNil(error);
 
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"binary"]);
 }
 
 // TEST0030: Builder with custom prefix
@@ -319,7 +319,8 @@
 - (void)test0031_WithTag {
     NSError *error;
     CSTaggedUrn *original = [CSTaggedUrn fromString:@"cap:generate" error:&error];
-    CSTaggedUrn *modified = [original withTag:@"ext" value:@"pdf"];
+    CSTaggedUrn *modified = [original withTag:@"ext" constraint:[CSTagConstraint exact:@"pdf"] error:&error];
+    XCTAssertNotNil(modified, @"%@", error);
 
     // Alphabetical order: ext, op
     XCTAssertEqualObjects([modified toString], @"cap:ext=pdf;generate");
@@ -514,8 +515,9 @@
 
 // TEST0044: Empty with prefix method
 - (void)test0044_EmptyWithPrefixMethod {
-    CSTaggedUrn *empty = [CSTaggedUrn emptyWithPrefix:@"custom"];
-    XCTAssertNotNil(empty);
+    NSError *error = nil;
+    CSTaggedUrn *empty = [CSTaggedUrn emptyWithPrefix:@"custom" error:&error];
+    XCTAssertNotNil(empty, @"%@", error);
     XCTAssertEqualObjects(empty.prefix, @"custom");
     XCTAssertEqual(empty.tags.count, 0);
     XCTAssertEqualObjects([empty toString], @"custom:");
@@ -528,8 +530,8 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:url=https://example_org/api;path=/some/file" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"url"], @"https://example_org/api");
-    XCTAssertEqualObjects([urn getTag:@"path"], @"/some/file");
+    XCTAssertEqualObjects([urn getTag:@"url"], [CSTagConstraint exact:@"https://example_org/api"]);
+    XCTAssertEqualObjects([urn getTag:@"path"], [CSTagConstraint exact:@"/some/file"]);
 }
 
 // TEST0046: Wildcard restrictions
@@ -548,7 +550,7 @@
     CSTaggedUrn *validValue = [CSTaggedUrn fromString:@"cap:key=*" error:&error];
     XCTAssertNotNil(validValue);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([validValue getTag:@"key"], @"*");
+    XCTAssertEqualObjects([validValue getTag:@"key"], [CSTagConstraint present]);
 }
 
 // TEST0047: Duplicate key rejection
@@ -565,23 +567,21 @@
 - (void)test0048_NumericKeyRestriction {
     NSError *error = nil;
 
-    // Pure numeric keys should be rejected
+    // A key begins with a letter, so neither a numeric key nor one that starts
+    // with a digit is an identifier
     CSTaggedUrn *numericKey = [CSTaggedUrn fromString:@"cap:123=value" error:&error];
     XCTAssertNil(numericKey);
-    XCTAssertNotNil(error);
-    XCTAssertEqual(error.code, CSTaggedUrnErrorNumericKey);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
 
-    // Reset error for next test
     error = nil;
+    CSTaggedUrn *digitFirst = [CSTaggedUrn fromString:@"cap:123key=value" error:&error];
+    XCTAssertNil(digitFirst);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
 
-    // Mixed alphanumeric keys should be allowed
+    // Digits after the first letter are allowed
+    error = nil;
     CSTaggedUrn *mixedKey1 = [CSTaggedUrn fromString:@"cap:key123=value" error:&error];
     XCTAssertNotNil(mixedKey1);
-    XCTAssertNil(error);
-
-    error = nil;
-    CSTaggedUrn *mixedKey2 = [CSTaggedUrn fromString:@"cap:123key=value" error:&error];
-    XCTAssertNotNil(mixedKey2);
     XCTAssertNil(error);
 
     error = nil;
@@ -589,7 +589,7 @@
     CSTaggedUrn *numericValue = [CSTaggedUrn fromString:@"cap:key=123" error:&error];
     XCTAssertNotNil(numericValue);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([numericValue getTag:@"key"], @"123");
+    XCTAssertEqualObjects([numericValue getTag:@"key"], [CSTagConstraint exact:@"123"]);
 }
 
 #pragma mark - Quoted Value Tests
@@ -604,12 +604,12 @@
 
     // Keys are always lowercase
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
-    XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
+    XCTAssertEqualObjects([urn getTag:@"ext"], [CSTagConstraint exact:@"pdf"]);
+    XCTAssertEqualObjects([urn getTag:@"target"], [CSTagConstraint exact:@"thumbnail"]);
 
     // Key lookup is case-insensitive (uppercase variants of an existing key resolve correctly).
-    XCTAssertEqualObjects([urn getTag:@"EXT"], @"pdf");
-    XCTAssertEqualObjects([urn getTag:@"Ext"], @"pdf");
+    XCTAssertEqualObjects([urn getTag:@"EXT"], [CSTagConstraint exact:@"pdf"]);
+    XCTAssertEqualObjects([urn getTag:@"Ext"], [CSTagConstraint exact:@"pdf"]);
 
     // The same URN written with different case parses to the same canonical form.
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:Ext=PDF;Generate;Target=Thumbnail;" error:&error];
@@ -624,14 +624,14 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:key=\"Value With Spaces\"" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"key"], @"Value With Spaces");
+    XCTAssertEqualObjects([urn getTag:@"key"], [CSTagConstraint exact:@"Value With Spaces"]);
 
     // Key is still lowercase
     error = nil;
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:KEY=\"Value With Spaces\"" error:&error];
     XCTAssertNotNil(urn2);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn2 getTag:@"key"], @"Value With Spaces");
+    XCTAssertEqualObjects([urn2 getTag:@"key"], [CSTagConstraint exact:@"Value With Spaces"]);
 
     // Unquoted vs quoted case difference
     error = nil;
@@ -641,8 +641,8 @@
     CSTaggedUrn *quoted = [CSTaggedUrn fromString:@"cap:key=\"UPPERCASE\"" error:&error];
     XCTAssertNotNil(quoted);
 
-    XCTAssertEqualObjects([unquoted getTag:@"key"], @"uppercase"); // lowercase
-    XCTAssertEqualObjects([quoted getTag:@"key"], @"UPPERCASE"); // preserved
+    XCTAssertEqualObjects([unquoted getTag:@"key"], [CSTagConstraint exact:@"uppercase"]); // lowercase
+    XCTAssertEqualObjects([quoted getTag:@"key"], [CSTagConstraint exact:@"UPPERCASE"]); // preserved
     XCTAssertNotEqualObjects(unquoted, quoted); // NOT equal
 }
 
@@ -653,21 +653,21 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:key=\"value;with;semicolons\"" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"key"], @"value;with;semicolons");
+    XCTAssertEqualObjects([urn getTag:@"key"], [CSTagConstraint exact:@"value;with;semicolons"]);
 
     // Equals in quoted values
     error = nil;
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:key=\"value=with=equals\"" error:&error];
     XCTAssertNotNil(urn2);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn2 getTag:@"key"], @"value=with=equals");
+    XCTAssertEqualObjects([urn2 getTag:@"key"], [CSTagConstraint exact:@"value=with=equals"]);
 
     // Spaces in quoted values
     error = nil;
     CSTaggedUrn *urn3 = [CSTaggedUrn fromString:@"cap:key=\"hello world\"" error:&error];
     XCTAssertNotNil(urn3);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn3 getTag:@"key"], @"hello world");
+    XCTAssertEqualObjects([urn3 getTag:@"key"], [CSTagConstraint exact:@"hello world"]);
 }
 
 // TEST0052: Quoted value escape sequences
@@ -677,14 +677,14 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:key=\"value\\\"quoted\\\"\"" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"key"], @"value\"quoted\"");
+    XCTAssertEqualObjects([urn getTag:@"key"], [CSTagConstraint exact:@"value\"quoted\""]);
 
     // Escaped backslashes
     error = nil;
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:key=\"path\\\\file\"" error:&error];
     XCTAssertNotNil(urn2);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn2 getTag:@"key"], @"path\\file");
+    XCTAssertEqualObjects([urn2 getTag:@"key"], [CSTagConstraint exact:@"path\\file"]);
 }
 
 // TEST0053: Mixed quoted unquoted
@@ -693,8 +693,8 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:a=\"Quoted\";b=simple" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"a"], @"Quoted");
-    XCTAssertEqualObjects([urn getTag:@"b"], @"simple");
+    XCTAssertEqualObjects([urn getTag:@"a"], [CSTagConstraint exact:@"Quoted"]);
+    XCTAssertEqualObjects([urn getTag:@"b"], [CSTagConstraint exact:@"simple"]);
 }
 
 // TEST0054: Unterminated quote error
@@ -769,7 +769,7 @@
     CSTaggedUrn *reparsed = [CSTaggedUrn fromString:serialized error:&error];
     XCTAssertNotNil(reparsed);
     XCTAssertEqualObjects(urn, reparsed);
-    XCTAssertEqualObjects([reparsed getTag:@"key"], @"Value With Spaces");
+    XCTAssertEqualObjects([reparsed getTag:@"key"], [CSTagConstraint exact:@"Value With Spaces"]);
 }
 
 // TEST0059: Has tag case sensitive
@@ -799,7 +799,7 @@
     XCTAssertNotNil(urn);
 
     // Key is lowercase
-    XCTAssertEqualObjects([urn getTag:@"key"], @"ValueWithCase");
+    XCTAssertEqualObjects([urn getTag:@"key"], [CSTagConstraint exact:@"ValueWithCase"]);
 
     // Value case preserved, so needs quoting
     XCTAssertEqualObjects([urn toString], @"cap:key=\"ValueWithCase\"");
@@ -1052,7 +1052,7 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:optimize" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
+    XCTAssertEqualObjects([urn getTag:@"optimize"], [CSTagConstraint present]);
     // Serializes as value-less (no =*)
     XCTAssertEqualObjects([urn toString], @"cap:optimize");
 }
@@ -1064,9 +1064,9 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:fast;optimize;secure" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"fast"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"secure"], @"*");
+    XCTAssertEqualObjects([urn getTag:@"fast"], [CSTagConstraint present]);
+    XCTAssertEqualObjects([urn getTag:@"optimize"], [CSTagConstraint present]);
+    XCTAssertEqualObjects([urn getTag:@"secure"], [CSTagConstraint present]);
     // Serializes alphabetically as value-less
     XCTAssertEqualObjects([urn toString], @"cap:fast;optimize;secure");
 }
@@ -1079,9 +1079,9 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"ext"], @"pdf");
-    XCTAssertEqualObjects([urn getTag:@"secure"], @"*");
+    XCTAssertEqualObjects([urn getTag:@"optimize"], [CSTagConstraint present]);
+    XCTAssertEqualObjects([urn getTag:@"ext"], [CSTagConstraint exact:@"pdf"]);
+    XCTAssertEqualObjects([urn getTag:@"secure"], [CSTagConstraint present]);
     // Serializes alphabetically
     XCTAssertEqualObjects([urn toString], @"cap:ext=pdf;generate;optimize;secure");
 }
@@ -1094,7 +1094,7 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
+    XCTAssertEqualObjects([urn getTag:@"optimize"], [CSTagConstraint present]);
     XCTAssertEqualObjects([urn toString], @"cap:generate;optimize");
 }
 
@@ -1209,9 +1209,9 @@
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:OPTIMIZE;Fast;SECURE" error:&error];
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"optimize"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"fast"], @"*");
-    XCTAssertEqualObjects([urn getTag:@"secure"], @"*");
+    XCTAssertEqualObjects([urn getTag:@"optimize"], [CSTagConstraint present]);
+    XCTAssertEqualObjects([urn getTag:@"fast"], [CSTagConstraint present]);
+    XCTAssertEqualObjects([urn getTag:@"secure"], [CSTagConstraint present]);
     XCTAssertEqualObjects([urn toString], @"cap:fast;optimize;secure");
 }
 
@@ -1262,16 +1262,16 @@
 
 // TEST0084: Valueless numeric key still rejected
 - (void)test0084_ValuelessNumericKeyStillRejected {
-    // Purely numeric keys are still rejected for value-less tags
+    // A value-less tag's key is an identifier too, so it begins with a letter
     NSError *error = nil;
     CSTaggedUrn *urn = [CSTaggedUrn fromString:@"cap:123" error:&error];
     XCTAssertNil(urn);
-    XCTAssertNotNil(error);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
 
     error = nil;
     CSTaggedUrn *urn2 = [CSTaggedUrn fromString:@"cap:generate;456" error:&error];
     XCTAssertNil(urn2);
-    XCTAssertNotNil(error);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
 }
 
 #pragma mark - Order-Theoretic Relations Tests
@@ -1602,6 +1602,152 @@
     XCTAssertNotNil(applied);
     XCTAssertNil(error);
     XCTAssertEqualObjects([applied toString], @"media:image;thumbnail");
+}
+
+#pragma mark - Text grammar
+
+static CSTaggedUrn *Parse(NSString *s) {
+    NSError *error = nil;
+    CSTaggedUrn *urn = [CSTaggedUrn fromString:s error:&error];
+    if (urn == nil) {
+        [NSException raise:NSInvalidArgumentException format:@"%@ does not parse: %@", s, error];
+    }
+    return urn;
+}
+
+static NSInteger ErrorCodeOf(NSString *s) {
+    NSError *error = nil;
+    CSTaggedUrn *urn = [CSTaggedUrn fromString:s error:&error];
+    return urn == nil ? error.code : 0;
+}
+
+// TEST6752: An unquoted value that begins with ? or ! is that qualifier (x=?v is x?=v, x=!v is x!=v); a quoted one is literal
+- (void)test6752_QualifierValueAlias {
+    XCTAssertEqualObjects(Parse(@"t:x=?v"), Parse(@"t:x?=v"));
+    XCTAssertEqualObjects([Parse(@"t:x=?v") toString], @"t:x?=v");
+    XCTAssertEqualObjects([Parse(@"t:x=?v") getTag:@"x"], [CSTagConstraint optionalNot:@"v"]);
+    XCTAssertEqualObjects(Parse(@"t:x=!v"), Parse(@"t:x!=v"));
+    XCTAssertEqualObjects([Parse(@"t:x=!v") toString], @"t:x!=v");
+    XCTAssertEqualObjects([Parse(@"t:x=!v") getTag:@"x"], [CSTagConstraint presentNot:@"v"]);
+
+    for (NSString *refused in @[@"t:x=?*", @"t:x=!?", @"t:x=??", @"t:x=?!", @"t:x=!*", @"t:?x=?v", @"t:x!=!v"]) {
+        XCTAssertEqual(ErrorCodeOf(refused), CSTaggedUrnErrorInvalidCharacter, @"%@", refused);
+    }
+
+    XCTAssertEqualObjects([Parse(@"t:x=?") toString], @"t:?x");
+    XCTAssertEqualObjects([Parse(@"t:x=!") toString], @"t:!x");
+
+    CSTaggedUrn *literal = Parse(@"t:x=\"?v\"");
+    XCTAssertEqualObjects([literal getTag:@"x"], [CSTagConstraint exact:@"?v"]);
+    XCTAssertEqualObjects([literal toString], @"t:x=\"?v\"");
+    XCTAssertEqualObjects(Parse([literal toString]), literal);
+    XCTAssertNotEqualObjects(literal, Parse(@"t:x?=v"));
+}
+
+// TEST6753: The prefix and every key are identifiers (an ASCII letter, then ASCII letters, digits and -), lowered, in parsing and in every constructor
+- (void)test6753_PrefixAndKeyAreIdentifiers {
+    for (NSString *refused in @[@"t:a_b=1", @"t:a.b=1", @"t:a/b=1", @"t:a:b=1", @"t:1a=1", @"t:é=1", @"my_app:x", @"1t:x", @"é:x"]) {
+        XCTAssertEqual(ErrorCodeOf(refused), CSTaggedUrnErrorInvalidCharacter, @"%@", refused);
+    }
+
+    CSTaggedUrn *urn = Parse(@"T:A-b1=v");
+    XCTAssertEqualObjects(urn.prefix, @"t");
+    XCTAssertEqualObjects([urn getTag:@"a-b1"], [CSTagConstraint exact:@"v"]);
+
+    NSError *error = nil;
+    XCTAssertNil([CSTaggedUrn fromPrefix:@"t" tags:@{@"a_b": [CSTagConstraint exact:@"v"]} error:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+    error = nil;
+    XCTAssertNil([CSTaggedUrn emptyWithPrefix:@"my_app" error:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+    error = nil;
+    XCTAssertNil([[[CSTaggedUrnBuilder builderWithPrefix:@"1t"] tag:@"x" value:@"v"] build:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+    error = nil;
+    XCTAssertNil([[[CSTaggedUrnBuilder builderWithPrefix:@"t"] tag:@"a.b" value:@"v"] build:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+    error = nil;
+    XCTAssertNil([Parse(@"t:") withTag:@"a/b" constraint:[CSTagConstraint exact:@"v"] error:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+    error = nil;
+    XCTAssertNil([CSTaggedUrn leastUpperBoundWithPrefix:@"a:b" urns:@[] error:&error]);
+    XCTAssertEqual(error.code, CSTaggedUrnErrorInvalidCharacter);
+
+    error = nil;
+    CSTaggedUrn *built = [[[CSTaggedUrnBuilder builderWithPrefix:@"T"] tag:@"Key-2" value:@"v"] build:&error];
+    XCTAssertEqualObjects(built, Parse(@"t:key-2=v"), @"%@", error);
+}
+
+/// `value` written as a quoted literal: `"`, with `"` and `\` escaped.
+static NSString *QuotedLiteral(NSString *value) {
+    NSMutableString *out = [NSMutableString stringWithString:@"\""];
+    for (NSUInteger i = 0; i < value.length; i++) {
+        unichar c = [value characterAtIndex:i];
+        if (c == '"' || c == '\\') [out appendString:@"\\"];
+        [out appendFormat:@"%C", c];
+    }
+    [out appendString:@"\""];
+    return out;
+}
+
+// TEST6754: Every value a URN holds prints so that it reads back as itself
+- (void)test6754_EveryValueReadsBack {
+    for (NSString *value in @[@"a,b", @"a(b)", @"x@y#z", @"a\tb", @"Été", @"a b", @"a;b", @"a=b", @"q\"q", @"b\\s",
+                              @"plain", @"?v", @"!v", @"*", @"?", @"!", @"*v"]) {
+        CSTaggedUrn *urn = Parse([@"t:k=" stringByAppendingString:QuotedLiteral(value)]);
+        XCTAssertEqualObjects([urn getTag:@"k"], [CSTagConstraint exact:value], @"stored value of %@", value);
+        NSString *printed = [urn toString];
+        NSError *error = nil;
+        CSTaggedUrn *reparsed = [CSTaggedUrn fromString:printed error:&error];
+        XCTAssertNotNil(reparsed, @"%@ printed as %@ does not read back: %@", value, printed, error);
+        XCTAssertEqualObjects(reparsed, urn, @"%@ printed as %@", value, printed);
+        XCTAssertEqualObjects([reparsed getTag:@"k"], [CSTagConstraint exact:value]);
+    }
+}
+
+// TEST6755: An unquoted value takes any character but ; = " \ and whitespace
+- (void)test6755_UnquotedValueTakesAnyNonSeparator {
+    CSTaggedUrn *urn = Parse(@"t:k=a,b(c)");
+    XCTAssertEqualObjects([urn getTag:@"k"], [CSTagConstraint exact:@"a,b(c)"]);
+
+    CSTaggedUrn *symbols = Parse(@"t:k=x@y#z+%&~'[]{}<>^$|");
+    XCTAssertEqualObjects([symbols getTag:@"k"], [CSTagConstraint exact:@"x@y#z+%&~'[]{}<>^$|"]);
+
+    XCTAssertEqualObjects([Parse(@"t:k=A,B") getTag:@"k"], [CSTagConstraint exact:@"a,b"]);
+
+    XCTAssertEqual(ErrorCodeOf(@"t:k=a\tb"), CSTaggedUrnErrorInvalidCharacter);
+
+    for (CSTaggedUrn *u in @[urn, symbols]) {
+        XCTAssertEqualObjects(Parse([u toString]), u);
+    }
+}
+
+// TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier
+- (void)test6756_QuotedValueIsLiteral {
+    NSError *error = nil;
+    CSTaggedUrn *star = Parse(@"t:x=\"*\"");
+    XCTAssertEqualObjects([star getTag:@"x"], [CSTagConstraint exact:@"*"]);
+    XCTAssertNotEqualObjects(star, Parse(@"t:x"));
+    XCTAssertEqualObjects([star toString], @"t:x=\"*\"");
+    XCTAssertEqualObjects(Parse([star toString]), star);
+    XCTAssertTrue([star conformsTo:Parse(@"t:x") error:&error]);
+    XCTAssertFalse([Parse(@"t:x") conformsTo:star error:&error]);
+
+    CSTaggedUrn *question = Parse(@"t:x=\"?\"");
+    XCTAssertEqualObjects([question getTag:@"x"], [CSTagConstraint exact:@"?"]);
+    XCTAssertFalse([question isEquivalentTo:Parse(@"t:?x") error:&error]);
+
+    XCTAssertEqualObjects([Parse(@"t:x=\"!\"") getTag:@"x"], [CSTagConstraint exact:@"!"]);
+    XCTAssertEqualObjects([Parse(@"t:x=\"?=v\"") getTag:@"x"], [CSTagConstraint exact:@"?=v"]);
+
+    CSTaggedUrn *optional = Parse(@"t:?x=\"*\"");
+    XCTAssertEqualObjects([optional getTag:@"x"], [CSTagConstraint optionalNot:@"*"]);
+    XCTAssertEqualObjects([optional toString], @"t:x?=\"*\"");
+    XCTAssertEqualObjects(Parse([optional toString]), optional);
+
+    // The builder's exact value is literal too
+    CSTaggedUrn *built = [[[CSTaggedUrnBuilder builderWithPrefix:@"t"] tag:@"x" value:@"*"] build:&error];
+    XCTAssertEqualObjects(built, star);
 }
 
 @end

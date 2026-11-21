@@ -5,11 +5,13 @@ Objective-C implementation of Tagged URN with strict validation, pattern matchin
 ## Features
 
 - **Strict Rule Enforcement** - Follows exact same rules as Rust, Go, and JavaScript implementations
-- **Case Insensitive** - All input normalized to lowercase (except quoted values)
+- **Six Tag Forms** - exact `k=v`, present `k`, absent `!k`, unconstrained `?k`, `k?=v` (absent or not v), `k!=v` (present and not v)
+- **Typed Tags** - Each tag is stored as the constraint it writes (`CSTagConstraint`: a kind and, for three kinds, a value)
+- **Identifiers** - The prefix and every key are an ASCII letter followed by ASCII letters, digits and `-`
+- **Case Insensitive** - The prefix, keys and unquoted values are lowered; quoted values keep their case
+- **Literal Quoting** - A quoted value is always the literal value: `x="*"` is the exact value `*`
 - **Tag Order Independent** - Canonical alphabetical sorting
-- **Special Pattern Values** - `*` (must-have-any), `?` (unspecified), `!` (must-not-have)
-- **Value-less Tags** - Tags without values (`tag`) mean must-have-any (`tag=*`)
-- **Graded Specificity** - Exact values score higher than wildcards
+- **Graded Specificity** - `?k` 0, `k?=v` 1, `k` 2, `k!=v` 3, `k=v` 4, `!k` 5
 - **Swift Compatible** - Full Swift interoperability via Objective-C bridge
 - **NSSecureCoding** - Secure serialization support
 
@@ -44,10 +46,13 @@ if (urn) {
 }
 
 // Build a URN
-CSTaggedUrn *built = [[[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
-    soloTag:@"extract"]
+CSTaggedUrn *built = [[[[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
+    marker:@"extract"]
     tag:@"format" value:@"pdf"]
+    tag:@"debug" constraint:[CSTagConstraint absent]]
     build:&error];
+// [built toString] is "cap:!debug;extract;format=pdf"
+// [built getTag:@"format"] is [CSTagConstraint exact:@"pdf"]
 
 // Check matching
 CSTaggedUrn *pattern = [CSTaggedUrn fromString:@"cap:generate" error:&error];
@@ -64,15 +69,16 @@ import TaggedUrn
 // Parse a URN
 do {
     let urn = try CSTaggedUrn.fromString("cap:generate;ext=pdf")
-    print("Operation: \(urn.getTag("op") ?? "nil")")  // "generate"
-    print("Canonical: \(urn.toString())")              // "cap:ext=pdf;generate"
+    print("Has generate marker: \(urn.hasMarkerTag("generate"))")   // true
+    print("ext: \(urn.getTag("ext")?.value ?? "nil")")               // "pdf"
+    print("Canonical: \(urn.toString())")                            // "cap:ext=pdf;generate"
 } catch {
     print("Parse error: \(error)")
 }
 
 // Build a URN
 let built = try CSTaggedUrnBuilder.builder(withPrefix: "cap")
-    .tag("op", value: "extract")
+    .marker("extract")
     .tag("format", value: "pdf")
     .build()
 
@@ -90,11 +96,13 @@ if try urn.conforms(to: pattern) {
 | Method | Description |
 |--------|-------------|
 | `+fromString:error:` | Parse URN from string |
-| `+fromPrefix:tags:error:` | Create from prefix and tag dictionary |
-| `+emptyWithPrefix:` | Create empty URN with prefix |
-| `-getTag:` | Get value for a tag key |
-| `-hasTag:withValue:` | Check if tag exists with value |
-| `-withTag:value:` | Return new URN with tag added/updated |
+| `+fromPrefix:tags:error:` | Create from prefix and a dictionary of constraints (checked) |
+| `+emptyWithPrefix:error:` | Create empty URN with prefix |
+| `-getTag:` | The constraint for a key, or nil |
+| `-constraintForKey:` | The constraint for a key, missing when it is not mentioned |
+| `-hasTag:withValue:` | Whether the URN writes the exact value `key=value` |
+| `-hasMarkerTag:` | Whether the URN writes the marker `key` |
+| `-withTag:constraint:error:` | Return new URN with tag added/replaced (checked) |
 | `-withoutTag:` | Return new URN with tag removed |
 | `-conformsTo:error:` | Check if URN conforms to a pattern |
 | `-accepts:error:` | Check if URN (as pattern) accepts an instance |
@@ -108,9 +116,11 @@ if try urn.conforms(to: pattern) {
 | Method | Description |
 |--------|-------------|
 | `+builderWithPrefix:` | Create builder with prefix |
-| `-tag:value:` | Add or update a tag (chainable) |
-| `-build:` | Build the URN (returns nil on error) |
-| `-buildAllowEmpty` | Build URN allowing empty tags |
+| `-tag:value:` | Add the exact value, taken literally (chainable) |
+| `-marker:` | Add a marker (chainable) |
+| `-tag:constraint:` | Add a tag of any form (chainable) |
+| `-build:` | Build the URN (nil with the first error a tag met) |
+| `-buildAllowEmpty:` | Build URN allowing empty tags |
 
 ## Matching Semantics
 
@@ -143,12 +153,14 @@ from them.
 
 ## Graded Specificity
 
-| Value Type | Score |
-|------------|-------|
-| Exact value (`K=v`) | 3 |
-| Must-have-any (`K=*`) | 2 |
-| Must-not-have (`K=!`) | 1 |
-| Unspecified (`K=?`) or missing | 0 |
+| Form | Score |
+|------|-------|
+| Unconstrained (`?K`) or missing | 0 |
+| Absent or not v (`K?=v`) | 1 |
+| Present (`K`) | 2 |
+| Present and not v (`K!=v`) | 3 |
+| Exact value (`K=v`) | 4 |
+| Absent (`!K`) | 5 |
 
 ## Error Codes
 
@@ -156,15 +168,15 @@ from them.
 |------|------|-------------|
 | 1 | InvalidFormat | Empty or malformed URN |
 | 2 | EmptyTag | Empty key or value component |
-| 3 | InvalidCharacter | Disallowed character in key/value |
+| 3 | InvalidCharacter | Disallowed character in prefix, key or value |
 | 4 | InvalidTagFormat | Tag not in key=value format |
 | 5 | MissingPrefix | URN does not start with prefix |
 | 6 | DuplicateKey | Same key appears twice |
-| 7 | NumericKey | Key is purely numeric |
 | 8 | UnterminatedQuote | Quoted value never closed |
 | 9 | InvalidEscapeSequence | Invalid escape in quoted value |
 | 10 | EmptyPrefix | Prefix is empty |
 | 11 | PrefixMismatch | Prefixes don't match in comparison |
+| 12 | WhitespaceInInput | Input has leading or trailing whitespace |
 
 ## Testing
 
