@@ -42,9 +42,9 @@
     XCTAssertNil(error);
 
     XCTAssertTrue([urn hasMarkerTag:@"generate"]);
-    XCTAssertEqualObjects([urn getTag:@"target"], @"thumbnail");
-    XCTAssertEqualObjects([urn getTag:@"format"], @"pdf");
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
+    XCTAssertEqualObjects([urn getTag:@"target"], [CSTagConstraint exact:@"thumbnail"]);
+    XCTAssertEqualObjects([urn getTag:@"format"], [CSTagConstraint exact:@"pdf"]);
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"binary"]);
 }
 
 // TEST0003: Builder j s o n output
@@ -60,8 +60,8 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    XCTAssertEqualObjects([urn getTag:@"output"], @"json");
-    XCTAssertEqualObjects([urn getTag:@"output"], @"json");
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"json"]);
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"json"]);
 }
 
 // TEST0004: Builder custom tags
@@ -76,8 +76,8 @@
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
 
-    XCTAssertEqualObjects([urn getTag:@"engine"], @"v2");
-    XCTAssertEqualObjects([urn getTag:@"quality"], @"high");
+    XCTAssertEqualObjects([urn getTag:@"engine"], [CSTagConstraint exact:@"v2"]);
+    XCTAssertEqualObjects([urn getTag:@"quality"], [CSTagConstraint exact:@"high"]);
     XCTAssertTrue([urn hasMarkerTag:@"compress"]);
 }
 
@@ -93,7 +93,7 @@
     XCTAssertNil(error);
 
     XCTAssertTrue([urn hasMarkerTag:@"convert"]);
-    XCTAssertEqualObjects([urn getTag:@"format"], @"jpg");
+    XCTAssertEqualObjects([urn getTag:@"format"], [CSTagConstraint exact:@"jpg"]);
 }
 
 // TEST0006: Builder empty build
@@ -109,9 +109,10 @@
 
 // TEST0007: Builder build allow empty
 - (void)test0007_BuilderBuildAllowEmpty {
-    CSTaggedUrn *urn = [[CSTaggedUrnBuilder builderWithPrefix:@"cap"] buildAllowEmpty];
+    NSError *error = nil;
+    CSTaggedUrn *urn = [[CSTaggedUrnBuilder builderWithPrefix:@"cap"] buildAllowEmpty:&error];
 
-    XCTAssertNotNil(urn);
+    XCTAssertNotNil(urn, @"%@", error);
     XCTAssertEqual(urn.tags.count, 0);
     XCTAssertEqualObjects([urn toString], @"cap:");
 }
@@ -128,7 +129,7 @@
 
     // tag:@"type" value:@"utility" creates type=utility
     XCTAssertEqualObjects([urn toString], @"cap:type=utility");
-    XCTAssertEqualObjects([urn getTag:@"type"], @"utility");
+    XCTAssertEqualObjects([urn getTag:@"type"], [CSTagConstraint exact:@"utility"]);
     // Six-form ladder: exact value = 4 points.
     XCTAssertEqual([urn specificity], 4);
 }
@@ -154,14 +155,14 @@
     NSString *expected = @"cap:codec=h264;format=mp4;framerate=30fps;output=binary;quality=1080p;target=video;transcode;type=media";
     XCTAssertEqualObjects([urn toString], expected);
 
-    XCTAssertEqualObjects([urn getTag:@"type"], @"media");
+    XCTAssertEqualObjects([urn getTag:@"type"], [CSTagConstraint exact:@"media"]);
     XCTAssertTrue([urn hasMarkerTag:@"transcode"]);
-    XCTAssertEqualObjects([urn getTag:@"target"], @"video");
-    XCTAssertEqualObjects([urn getTag:@"format"], @"mp4");
-    XCTAssertEqualObjects([urn getTag:@"codec"], @"h264");
-    XCTAssertEqualObjects([urn getTag:@"quality"], @"1080p");
-    XCTAssertEqualObjects([urn getTag:@"framerate"], @"30fps");
-    XCTAssertEqualObjects([urn getTag:@"output"], @"binary");
+    XCTAssertEqualObjects([urn getTag:@"target"], [CSTagConstraint exact:@"video"]);
+    XCTAssertEqualObjects([urn getTag:@"format"], [CSTagConstraint exact:@"mp4"]);
+    XCTAssertEqualObjects([urn getTag:@"codec"], [CSTagConstraint exact:@"h264"]);
+    XCTAssertEqualObjects([urn getTag:@"quality"], [CSTagConstraint exact:@"1080p"]);
+    XCTAssertEqualObjects([urn getTag:@"framerate"], [CSTagConstraint exact:@"30fps"]);
+    XCTAssertEqualObjects([urn getTag:@"output"], [CSTagConstraint exact:@"binary"]);
 
     // Six-form ladder: 7 exact-valued tags × 4 + 1 marker (transcode) × 2 = 28 + 2 = 30.
     XCTAssertEqual([urn specificity], 30);
@@ -228,11 +229,11 @@
     [builder2 marker:@"generate"];
     CSTaggedUrn *generalPattern = [builder2 build:&error];
 
-    // Create a pattern with wildcard (ext=* means must-have-any)
+    // Create a pattern with a marker (ext means must-have-any)
     CSTaggedUrnBuilder *builder3 = [CSTaggedUrnBuilder builderWithPrefix:@"cap"];
     [builder3 marker:@"generate"];
     [builder3 tag:@"target" value:@"thumbnail"];
-    [builder3 tag:@"ext" value:@"*"];
+    [builder3 marker:@"ext"];
     CSTaggedUrn *wildcardPattern = [builder3 build:&error];
 
     XCTAssertNotNil(specificInstance);
@@ -285,7 +286,7 @@
 
     XCTAssertNotNil(urn);
     XCTAssertNil(error);
-    XCTAssertEqualObjects([urn getTag:@"name"], @"MyValue");
+    XCTAssertEqualObjects([urn getTag:@"name"], [CSTagConstraint exact:@"MyValue"]);
     // Should be quoted to preserve case
     XCTAssertTrue([[urn toString] containsString:@"\"MyValue\""]);
 }
