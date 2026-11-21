@@ -1190,6 +1190,31 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return self.specificity > other.specificity;
 }
 
+/// Two strings in code-point order: their UTF-8 bytes, the order Lean's String < uses.
+static NSComparisonResult CSCompareCodePoints(NSString *a, NSString *b) {
+    int c = strcmp(a.UTF8String, b.UTF8String);
+    return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+}
+
+- (NSComparisonResult)compare:(CSTaggedUrn *)other {
+    NSComparisonResult byPrefix = CSCompareCodePoints(self.mutablePrefix, other.mutablePrefix);
+    if (byPrefix != NSOrderedSame) return byPrefix;
+    NSArray<NSString *> *keysA = CSSortedKeys(self.storedTags.allKeys);
+    NSArray<NSString *> *keysB = CSSortedKeys(other.storedTags.allKeys);
+    for (NSUInteger i = 0; i < MIN(keysA.count, keysB.count); i++) {
+        NSComparisonResult byKey = CSCompareCodePoints(keysA[i], keysB[i]);
+        if (byKey != NSOrderedSame) return byKey;
+        CSTagConstraint *a = self.storedTags[keysA[i]];
+        CSTagConstraint *b = other.storedTags[keysB[i]];
+        // The kinds are declared in the truth table's order.
+        if (a.kind != b.kind) return a.kind < b.kind ? NSOrderedAscending : NSOrderedDescending;
+        NSComparisonResult byValue = CSCompareCodePoints(a.value ?: @"", b.value ?: @"");
+        if (byValue != NSOrderedSame) return byValue;
+    }
+    if (keysA.count == keysB.count) return NSOrderedSame;
+    return keysA.count < keysB.count ? NSOrderedAscending : NSOrderedDescending;
+}
+
 - (CSTaggedUrn *)withWildcardTag:(NSString *)key {
     NSString *normalizedKey = [key lowercaseString];
     if (self.storedTags[normalizedKey] == nil) {

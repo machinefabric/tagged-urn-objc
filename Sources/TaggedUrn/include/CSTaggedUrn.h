@@ -334,6 +334,17 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 - (BOOL)isMoreSpecificThan:(CSTaggedUrn * _Nonnull)other error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ * The order of URNs: by their parts, never their text. The prefix, then the
+ * tags in key order, each by its key, then by its constraint's form in the
+ * truth table's order (unconstrained, optionalNot, present, presentNot, exact,
+ * absent), then by its value; a URN whose tags are the beginning of another's
+ * stands first. Keys and values are ordered by code point. The text would
+ * order `file;sample` after `file-path`, wherever one key is the beginning of
+ * another.
+ */
+- (NSComparisonResult)compare:(CSTaggedUrn * _Nonnull)other;
+
+/**
  * The same URN with `key`, where it has it, made a marker (present)
  * @param key The tag key
  * @return A new CSTaggedUrn instance
@@ -382,6 +393,13 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
  * @return The quoted value with proper escaping
  */
 + (NSString *)quoteValue:(NSString *)value;
+
+/**
+ * A value as a tag writes it: bare, or quoted when it must be to read back as itself.
+ * @param value The value to write
+ * @return The value as written
+ */
++ (NSString *)writeValue:(NSString *)value;
 
 /**
  * Per-key truth-table cell, as the model decides it: whether the instance's
