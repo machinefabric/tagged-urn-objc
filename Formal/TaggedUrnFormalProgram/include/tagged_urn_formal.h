@@ -74,6 +74,10 @@ int32_t tagged_urn_formal_meets_closed(const lungo_value *a, const lungo_value *
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_refines(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);
 
+/* TaggedUrn.Exec.refinesBothClosed : TaggedUrn.Exec.Wf → TaggedUrn.Exec.Wf → Bool */
+/* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
+int32_t tagged_urn_formal_refines_both_closed(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);
+
 /* TaggedUrn.Exec.refinesClosed : TaggedUrn.Exec.Wf → TaggedUrn.Exec.Wf → Bool */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_refines_closed(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);
