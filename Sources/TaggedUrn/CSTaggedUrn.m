@@ -760,6 +760,12 @@ static NSString *CSCanonicalNoValueForQualifier(char qualifier) {
     return tagValue && [tagValue isEqualToString:@"*"];
 }
 
+- (BOOL)admitsAbsence:(NSString *)key {
+    // The stored form of `!key` is the model's absence; absence satisfies the
+    // constraint exactly when the constraint lets the key be absent.
+    return [CSTaggedUrn valuesMatchInst:@"!" patt:self.mutableTags[[key lowercaseString]]];
+}
+
 - (CSTaggedUrn *)withTag:(NSString *)key value:(NSString *)value {
     NSMutableDictionary *newTags = [self.mutableTags mutableCopy];
     // Key lowercase, value preserved
