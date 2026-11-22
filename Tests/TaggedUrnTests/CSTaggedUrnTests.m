@@ -1541,6 +1541,22 @@
     XCTAssertEqual(error.code, CSTaggedUrnErrorPrefixMismatch);
 }
 
+// TEST7210: A written tag lets its key be absent exactly when it is !k, ?k or k?=v; a key the URN does not mention says nothing of it, so it allows absence too
+- (void)test7210_admitsAbsenceByForm {
+    NSError *error = nil;
+    CSTaggedUrn *urn = [CSTaggedUrn fromString:@"media:!a;?b;c?=v;d;e=v;f!=v" error:&error];
+    XCTAssertNotNil(urn, @"%@", error);
+    XCTAssertTrue([urn admitsAbsence:@"a"]);
+    XCTAssertTrue([urn admitsAbsence:@"b"]);
+    XCTAssertTrue([urn admitsAbsence:@"c"]);
+    XCTAssertFalse([urn admitsAbsence:@"d"]);
+    XCTAssertFalse([urn admitsAbsence:@"e"]);
+    XCTAssertFalse([urn admitsAbsence:@"f"]);
+    XCTAssertTrue([urn admitsAbsence:@"g"]);
+    // Keys are read as the URN stores them: lowercase.
+    XCTAssertTrue([urn admitsAbsence:@"A"]);
+}
+
 // TEST587: Delta equivalent preserves runtime refinement
 - (void)test587_deltaEquivalentPreservesRuntimeRefinement {
     NSError *error = nil;

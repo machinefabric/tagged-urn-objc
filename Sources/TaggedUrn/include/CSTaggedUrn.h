@@ -132,6 +132,16 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 - (BOOL)hasMarkerTag:(NSString * _Nonnull)tagName;
 
 /**
+ * Whether what this URN writes at `key` lets the key be absent: `!key`,
+ * `?key` and `key?=v` do, and so does a key the URN does not mention, which
+ * says nothing of it; `key`, `key=v` and `key!=v` do not. Decided by the
+ * model: absence satisfies the constraint.
+ * @param key The tag key
+ * @return YES if the key may be absent
+ */
+- (BOOL)admitsAbsence:(NSString * _Nonnull)key;
+
+/**
  * A new tagged URN with an added or replaced tag. The key must be an identifier and is
  * lowered; the constraint must be one a URN can write.
  * @return The new URN, or nil with an error naming what was refused

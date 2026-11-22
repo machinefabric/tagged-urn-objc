@@ -842,6 +842,12 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return [self getTag:tagName].kind == CSTagConstraintKindPresent;
 }
 
+- (BOOL)admitsAbsence:(NSString *)key {
+    // Absence satisfies the constraint exactly when the constraint lets the
+    // key be absent.
+    return [CSTaggedUrn valuesMatchInst:[CSTagConstraint absent] patt:[self constraintForKey:key]];
+}
+
 - (nullable CSTaggedUrn *)withTag:(NSString *)key constraint:(CSTagConstraint *)constraint error:(NSError **)error {
     NSString *k = CSIdentifier(@"key", key, error);
     if (k == nil) return nil;
