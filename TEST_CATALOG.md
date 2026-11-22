@@ -2,7 +2,7 @@
 
 Generated from the test catalogue. Edit the tests, not this file.
 
-107 tests: 107 numbered, 0 unnumbered.
+109 tests: 109 numbered, 0 unnumbered.
 
 ## Numbered
 
@@ -101,18 +101,20 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST583 | tagged-urn/tagged-urn-objc | objc | `test583_prefixMismatchErrors` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1369 | TEST583: Prefix mismatch returns error for both relations |
 | TEST584 | tagged-urn/tagged-urn-objc | objc | `test584_emptyTagsComparableToAll` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1386 | TEST584: Empty tag set is comparable to everything with same prefix |
 | TEST586 | tagged-urn/tagged-urn-objc | objc | `test586_specialValues` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1407 | TEST586: Special values (*, !, ?) with isEquivalent and isComparable |
-| TEST587 | tagged-urn/tagged-urn-objc | objc | `test587_deltaEquivalentPreservesRuntimeRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1545 | TEST587: Delta equivalent preserves runtime refinement |
-| TEST588 | tagged-urn/tagged-urn-objc | objc | `test588_deltaIncomparableReplacementPreservesUnrelatedRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1567 | TEST588: Delta incomparable replacement preserves unrelated refinement |
-| TEST589 | tagged-urn/tagged-urn-objc | objc | `test589_deltaComparableRemovalDropsOnlyDeclaredCoordinate` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1588 | TEST589: Delta comparable removal drops only declared coordinate |
+| TEST587 | tagged-urn/tagged-urn-objc | objc | `test587_deltaEquivalentPreservesRuntimeRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1575 | TEST587: Delta equivalent preserves runtime refinement |
+| TEST588 | tagged-urn/tagged-urn-objc | objc | `test588_deltaIncomparableReplacementPreservesUnrelatedRefinement` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1597 | TEST588: Delta incomparable replacement preserves unrelated refinement |
+| TEST589 | tagged-urn/tagged-urn-objc | objc | `test589_deltaComparableRemovalDropsOnlyDeclaredCoordinate` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1618 | TEST589: Delta comparable removal drops only declared coordinate |
 | TEST596 | tagged-urn/tagged-urn-objc | objc | `test596_builderWithPrefix` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:269 | TEST596: Builder with prefix verification |
 | TEST597 | tagged-urn/tagged-urn-objc | objc | `test597_builderPreservesCase` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:281 | TEST597: Builder case preservation for quoted values |
 | TEST598 | tagged-urn/tagged-urn-objc | objc | `test598_builderRejectsEmptyValue` | Tests/TaggedUrnTests/CSTaggedUrnBuilderTests.m:295 | TEST598: Builder rejects empty tag values (matches Rust's Result error) |
 | TEST599 | tagged-urn/tagged-urn-objc | objc | `test599_everyRowOfTheModelsTable` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1462 | TEST599: every row of the proved model's table. The rules are proved in ../formal (Lean); this is what ties them to this mirror: every row of ../formal/conformance.json (written by the model, `lake exe conformance`) is parsed by this parser and must get the model's verdict — for the guarantee (conformsTo), the possibility (meets), and the complete reading of the instance (satisfies, maySatisfy) — and every set of URNs in it must get the model's bound (leastUpperBound). The same table runs in every mirror. |
 | TEST600 | tagged-urn/tagged-urn-objc | swift | `test0600_EveryModelFunctionCarriesAProvedClaim` | Tests/TaggedUrnFormalTests/FormalAssuranceTests.swift:10 | TEST0600: every function of the proved model this mirror calls carries a proved claim. The model's package carries what is proved of each function it exports (its assurance document, generated from ../formal): each one decides, equals or keeps what its claim says, and none rests on an assumption about the host — the model needs none. |
-| TEST6752 | tagged-urn/tagged-urn-objc | objc | `test6752_QualifierValueAlias` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1626 | TEST6752: An unquoted value that begins with ? or ! is that qualifier (x=?v is x?=v, x=!v is x!=v); a quoted one is literal |
-| TEST6753 | tagged-urn/tagged-urn-objc | objc | `test6753_PrefixAndKeyAreIdentifiers` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1649 | TEST6753: The prefix and every key are identifiers (an ASCII letter, then ASCII letters, digits and -), lowered, in parsing and in every constructor |
-| TEST6754 | tagged-urn/tagged-urn-objc | objc | `test6754_EveryValueReadsBack` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1695 | TEST6754: Every value a URN holds prints so that it reads back as itself |
-| TEST6755 | tagged-urn/tagged-urn-objc | objc | `test6755_UnquotedValueTakesAnyNonSeparator` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1712 | TEST6755: An unquoted value takes any character but ; = " \ and whitespace |
-| TEST6756 | tagged-urn/tagged-urn-objc | objc | `test6756_QuotedValueIsLiteral` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1729 | TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier |
-| TEST7241 | tagged-urn/tagged-urn-objc | objc | `test7241_UrnsAreOrderedByTheirParts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1758 | TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value |
+| TEST6752 | tagged-urn/tagged-urn-objc | objc | `test6752_QualifierValueAlias` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1656 | TEST6752: An unquoted value that begins with ? or ! is that qualifier (x=?v is x?=v, x=!v is x!=v); a quoted one is literal |
+| TEST6753 | tagged-urn/tagged-urn-objc | objc | `test6753_PrefixAndKeyAreIdentifiers` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1679 | TEST6753: The prefix and every key are identifiers (an ASCII letter, then ASCII letters, digits and -), lowered, in parsing and in every constructor |
+| TEST6754 | tagged-urn/tagged-urn-objc | objc | `test6754_EveryValueReadsBack` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1725 | TEST6754: Every value a URN holds prints so that it reads back as itself |
+| TEST6755 | tagged-urn/tagged-urn-objc | objc | `test6755_UnquotedValueTakesAnyNonSeparator` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1742 | TEST6755: An unquoted value takes any character but ; = " \ and whitespace |
+| TEST6756 | tagged-urn/tagged-urn-objc | objc | `test6756_QuotedValueIsLiteral` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1759 | TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier |
+| TEST7210 | tagged-urn/tagged-urn-objc | objc | `test7210_admitsAbsenceByForm` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1559 | TEST7210: A written tag lets its key be absent exactly when it is !k, ?k or k?=v; a key the URN does not mention says nothing of it, so it allows absence too |
+| TEST7223 | tagged-urn/tagged-urn-objc | objc | `test7223_urnReadBackFromItsHandle` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1545 | TEST7223: A URN read back from its model handle is the URN: its prefix and every tag, each form and a quoted value included |
+| TEST7241 | tagged-urn/tagged-urn-objc | objc | `test7241_UrnsAreOrderedByTheirParts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1788 | TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value |
 

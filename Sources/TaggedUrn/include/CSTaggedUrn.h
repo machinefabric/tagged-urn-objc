@@ -100,6 +100,16 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 + (nullable instancetype)fromPrefix:(NSString * _Nonnull)prefix tags:(NSDictionary<NSString *, CSTagConstraint *> * _Nonnull)tags error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ * The URN a model value stands for, such as one a program generated from a model that
+ * builds on tagged-urn's made. Read back with the model's `parts`; its prefix, keys and
+ * constraints are checked as `fromPrefix:tags:error:` checks them.
+ * @param formal A URN value on lungo's runtime; it stays the caller's
+ * @param error Error naming the prefix, key or constraint refused
+ * @return A new CSTaggedUrn instance or nil if invalid
+ */
++ (nullable instancetype)fromFormal:(const struct lungo_value * _Nonnull)formal error:(NSError * _Nullable * _Nullable)error;
+
+/**
  * Create an empty tagged URN with the specified prefix (required), which must be an identifier
  * @param prefix The prefix for this URN
  * @param error Error if the prefix is not an identifier
