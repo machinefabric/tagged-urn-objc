@@ -459,14 +459,15 @@
     XCTAssertEqualObjects(decoded.prefix, @"myapp");
 }
 
-// TEST0041: Copying
+// TEST0041: Copying a tagged URN gives the same value; it never changes once made, so the copy is
+// the URN itself
 - (void)test0041_Copying {
     NSError *error;
     CSTaggedUrn *original = [CSTaggedUrn fromString:@"cap:generate" error:&error];
     CSTaggedUrn *copy = [original copy];
 
     XCTAssertEqualObjects(original, copy);
-    XCTAssertNotEqual(original, copy); // Different objects
+    XCTAssertEqual(original, copy);
 }
 
 #pragma mark - New Rule Tests
