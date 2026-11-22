@@ -5,14 +5,17 @@
 //  This provides a flat, tag-based tagged URN system with configurable prefix,
 //  pattern matching, and graded specificity comparison.
 //
-//  Each tag is stored as the constraint it writes (CSTagConstraint), one of the
-//  proved model's forms:
-//    K=v   - exact: must have key K with exact value v
-//    K     - present: must have key K with any value (K=* is the same)
-//    !K    - absent: must NOT have key K
-//    ?K    - unconstrained: no constraint on key K
-//    K?=v  - optionalNot: absent, or present and not v
-//    K!=v  - presentNot: present and not v
+//  Each tag is stored as the constraint it writes (CSTagConstraint), the proved
+//  model's Constraint: whether the key may be absent, and the values it may have
+//  when it is there — one of a set, or none of a set. As the text writes it:
+//    K=v      - there, exactly v
+//    K        - there, any value (K=* is the same)
+//    !K       - absent
+//    ?K       - any state
+//    K?=v     - absent, or there and not v
+//    K!=v     - there and not v
+//    K=a|b    - there, one of a, b (K=a|b|! - or absent)
+//    K!=a|b   - there, none of a, b (K?=a|b - or absent)
 //    (missing) - no constraint; never stored
 //
 
@@ -22,35 +25,58 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CSTaggedUrnCoordinateDelta;
 
-/// The model's forms, numbered as the model numbers its constructors.
+/// The model's Constraint constructors, numbered as the model numbers them.
 typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
     CSTagConstraintKindMissing = 0,
-    CSTagConstraintKindUnconstrained = 1,
-    CSTagConstraintKindOptionalNot = 2,
-    CSTagConstraintKindPresent = 3,
-    CSTagConstraintKindPresentNot = 4,
-    CSTagConstraintKindExact = 5,
-    CSTagConstraintKindAbsent = 6,
+    CSTagConstraintKindWritten = 1,
+};
+
+/// The model's Values constructors, numbered as the model numbers them: the values a key
+/// may have, or the values it may not.
+typedef NS_ENUM(NSInteger, CSTagValuesKind) {
+    CSTagValuesKindOneOf = 0,
+    CSTagValuesKindNoneOf = 1,
 };
 
 /**
- * What a tag writes about its key: one of the proved model's seven forms, and
- * the value for the three that carry one. Immutable. Missing stands for a key a
- * URN omits and is never stored.
+ * What a tag writes about its key: the proved model's Constraint. Missing stands for a
+ * key a URN omits and is never stored; a written constraint says whether the key may be
+ * absent, and which values it may have when it is there: one of `values` or none of them.
+ * Immutable, and its values are kept canonical — each value once, in increasing order —
+ * so two constraints that say the same thing are equal. The class methods build it as
+ * the text writes it.
  */
 @interface CSTagConstraint : NSObject <NSCopying, NSSecureCoding>
 
 @property (nonatomic, readonly) CSTagConstraintKind kind;
-/// The value of an exact, optionalNot or presentNot constraint; nil for the others.
-@property (nonatomic, readonly, nullable) NSString *value;
+/// Whether the key may be absent; NO for missing.
+@property (nonatomic, readonly) BOOL absent;
+/// Whether `values` are the values the key may have (oneOf) or may not (noneOf).
+@property (nonatomic, readonly) CSTagValuesKind valuesKind;
+/// The values, each once, in increasing code-point order; nil for missing.
+@property (nonatomic, readonly, nullable) NSArray<NSString *> *values;
+/// The value of `k=v`, when the constraint is that form; nil otherwise.
+@property (nonatomic, readonly, nullable) NSString *exactValue;
+/// Whether the constraint allows no state at all. No text writes it.
+@property (nonatomic, readonly) BOOL isEmptyForm;
 
 + (instancetype)missing;
+/// `?k`: any state, absent or any value.
 + (instancetype)unconstrained;
+/// `k`: there, with any value.
 + (instancetype)present;
+/// `!k`: not there.
 + (instancetype)absent;
+/// `k=v`: there, and exactly `v`.
 + (instancetype)exact:(NSString *)value;
+/// `k?=v`: absent, or there and not `v`.
 + (instancetype)optionalNot:(NSString *)value;
+/// `k!=v`: there, and not `v`.
 + (instancetype)presentNot:(NSString *)value;
+/// `k=a|b`: there, with one of the values; `k=a|b|!` when `orAbsent`.
++ (instancetype)oneOf:(NSArray<NSString *> *)values orAbsent:(BOOL)orAbsent;
+/// `k!=a|b`: there, with none of the values; `k?=a|b` when `orAbsent`.
++ (instancetype)noneOf:(NSArray<NSString *> *)values orAbsent:(BOOL)orAbsent;
 
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -91,7 +117,8 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 /**
  * Create a tagged URN from a prefix and its tags. The prefix and every key must be
  * identifiers (an ASCII letter, then ASCII letters, digits and `-`) and are lowered;
- * every constraint must be one a URN can write (not missing, no empty value).
+ * every constraint must be one a URN can write (not missing, not the empty form, no
+ * empty value).
  * @param prefix The prefix for this URN (e.g., "cap", "myapp")
  * @param tags Each key's constraint
  * @param error Error naming the prefix, key or constraint refused
@@ -136,7 +163,7 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 - (BOOL)hasTag:(NSString * _Nonnull)key withValue:(NSString * _Nonnull)value;
 
 /**
- * Whether `tagName` is present as a marker (present, written as just the key).
+ * Whether `tagName` is present as a marker (there with any value, written as just the key).
  * Example: `cap:constrained;...` has marker tag "constrained".
  */
 - (BOOL)hasMarkerTag:(NSString * _Nonnull)tagName;
@@ -232,11 +259,11 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 /**
  * The most specific URN every one of `urns` conforms to: their common denominator.
  *
- * Key by key, the bound allows every state some input allows. Where no single form
- * says exactly that, there is no least bound at all — `ext=png` and `ext=jpeg` are both
- * `ext`, both `ext!=pdf` and both `ext!=gif` — so the bound is the least among those
- * that exclude only values the inputs name: here `ext`. When one input holds all the
- * others, the bound is that input. The bound of no URNs is the URN with no tags.
+ * Key by key, the bound allows every state some input allows, and no other: `ext=png`
+ * and `ext=jpeg` are bound by `ext=jpeg|png`, `ext=png` and `!ext` by `ext=png|!`, and
+ * `ext=png` and `ext` by `ext`. A key some input does not mention, the bound does not
+ * mention either. When one input holds all the others, the bound is that input. The
+ * bound of no URNs is the URN with no tags.
  *
  * Made by the proved model (`TaggedUrn.Exec.leastUpperBound`), whose theorems say every
  * input conforms to the bound and the bound conforms to every such bound of them.
@@ -313,28 +340,32 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 - (nullable CSTaggedUrn *)applyDelta:(CSTaggedUrnCoordinateDelta * _Nonnull)delta error:(NSError * _Nullable * _Nullable)error;
 
 /**
- * Get the specificity score for URN matching, as the model computes it.
- * Sum of per-tag truth-table scores. Per-tag ladder:
+ * Get the specificity score for URN matching, as the model computes it
+ * (`TaggedUrn.Exec.specificity`): the sum of per-tag scores. Each tag scores by what it
+ * allows:
  *
- *     unconstrained  -> 0   (no constraint)
- *     optionalNot    -> 1   (absent or not v)
- *     present        -> 2   (must-have-any)
- *     presentNot     -> 3   (present and not v)
- *     exact          -> 4   (exact match)
- *     absent         -> 5   (must-not-have)
+ *     absence and every value                    -> 0   (`?x`)
+ *     absence and some values, not every value   -> 1   (`x?=v`, `x=v|!`)
+ *     every value                                -> 2   (`x`)
+ *     two or more values, not every value        -> 3   (`x!=v`, `x=a|b`)
+ *     exactly one value                          -> 4   (`x=v`)
+ *     only absence                               -> 5   (`!x`)
+ *
+ * A tag that is narrower never scores lower. Identity (`prefix:` with no tags) scores 0.
  *
  * @return The specificity score
  */
 - (NSUInteger)specificity;
 
 /**
- * How many tags fall into each non-zero form, from the highest score to the lowest.
+ * How many tags score 5, 4, 3, 2 and 1 (`TaggedUrn.Exec.tagSpecificity`), named by the
+ * written form of each score.
  *
- * @param mustNotHave        Pointer to store the absent count (score 5)
- * @param exact              Pointer to store the exact count (score 4)
- * @param presentNotValue    Pointer to store the presentNot count (score 3)
- * @param mustHaveAny        Pointer to store the present count (score 2)
- * @param absentOrNotValue   Pointer to store the optionalNot count (score 1)
+ * @param mustNotHave        Pointer to store the count scoring 5 (`!x`)
+ * @param exact              Pointer to store the count scoring 4 (`x=v`)
+ * @param presentNotValue    Pointer to store the count scoring 3 (`x!=v`, `x=a|b`)
+ * @param mustHaveAny        Pointer to store the count scoring 2 (`x`)
+ * @param absentOrNotValue   Pointer to store the count scoring 1 (`x?=v`, `x=v|!`)
  */
 - (void)specificityTupleMustNotHave:(NSUInteger *)mustNotHave
                               exact:(NSUInteger *)exact
@@ -356,8 +387,8 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 /**
  * The order of URNs: by their parts, never their text. The prefix, then the
  * tags in key order, each by its key, then by its constraint's form in the
- * truth table's order (unconstrained, optionalNot, present, presentNot, exact,
- * absent), then by its value; a URN whose tags are the beginning of another's
+ * truth table's order (`?k`, `k?=…`, `k=…|!`, `k`, `k!=…`, `k=…`, `!k`), then
+ * by its values in order; a URN whose tags are the beginning of another's
  * stands first. Keys and values are ordered by code point. The text would
  * order `file;sample` after `file-path`, wherever one key is the beginning of
  * another.
@@ -399,7 +430,7 @@ typedef NS_ENUM(NSInteger, CSTagConstraintKind) {
 
 /**
  * Whether a value must be quoted to read back as itself: it holds a character a bare
- * value cannot (`;`, `=`, `"`, `\`, whitespace), an uppercase letter (a bare value is
+ * value cannot (`;`, `=`, `|`, `"`, `\`, whitespace), an uppercase letter (a bare value is
  * lowered), or begins with `*`, `?` or `!` (which a bare value reads as a sigil or a
  * qualifier).
  * @param value The value to check
@@ -471,7 +502,8 @@ typedef NS_ERROR_ENUM(CSTaggedUrnErrorDomain, CSTaggedUrnError) {
     CSTaggedUrnErrorInvalidEscapeSequence = 9,
     CSTaggedUrnErrorEmptyPrefix = 10,
     CSTaggedUrnErrorPrefixMismatch = 11,
-    CSTaggedUrnErrorWhitespaceInInput = 12
+    CSTaggedUrnErrorWhitespaceInInput = 12,
+    CSTaggedUrnErrorDuplicateValue = 13
 };
 
 /**
@@ -506,7 +538,7 @@ typedef NS_ERROR_ENUM(CSTaggedUrnErrorDomain, CSTaggedUrnError) {
 - (CSTaggedUrnBuilder * _Nonnull)tag:(NSString * _Nonnull)key value:(NSString * _Nonnull)value;
 
 /**
- * Add `key` as a marker (present, written as just the key).
+ * Add `key` as a marker (there with any value, written as just the key).
  * @param key The marker key
  * @return This builder instance for chaining
  */

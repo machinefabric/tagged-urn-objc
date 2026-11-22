@@ -15,6 +15,7 @@ int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefines(const uint8_t *input,
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefinesBothClosed(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefinesClosed(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dspecificity(const uint8_t *input, size_t len, lungo_buffer *out);
+int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dtagSpecificity(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dvaluesMatch(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dvaluesMatchClosed(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dvaluesMeet(const uint8_t *input, size_t len, lungo_buffer *out);
