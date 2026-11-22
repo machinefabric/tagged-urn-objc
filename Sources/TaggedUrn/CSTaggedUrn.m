@@ -766,6 +766,23 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return [[CSTaggedUrn alloc] initWithPrefix:lower tags:validated];
 }
 
++ (nullable instancetype)fromFormal:(const lungo_value *)formal error:(NSError **)error {
+    lungo_value *parts = NULL;
+    lungo_error *failure = NULL;
+    if (tagged_urn_formal_parts(formal, &parts, &failure) != LUNGO_OK) {
+        CSModelFailed(@"read a URN's parts", failure);
+    }
+    NSString *prefix = CSStringOfModel(lungo_value_first(parts));
+    const lungo_value *list = lungo_value_second(parts);
+    NSMutableDictionary<NSString *, CSTagConstraint *> *tags = [NSMutableDictionary dictionary];
+    for (size_t i = 0; i < lungo_value_count(list); i++) {
+        const lungo_value *pair = lungo_value_item(list, i);
+        tags[CSStringOfModel(lungo_value_first(pair))] = CSConstraintOfModel(lungo_value_second(pair));
+    }
+    lungo_value_free(parts);
+    return [CSTaggedUrn fromPrefix:prefix tags:tags error:error];
+}
+
 /// The one way a CSTaggedUrn is made: the fields and the model's value, together, from the same
 /// tags, which every caller has already checked. The model refuses keys that are not strictly
 /// increasing; the keys are sorted by their UTF-8 bytes, which is the code-point order Lean's

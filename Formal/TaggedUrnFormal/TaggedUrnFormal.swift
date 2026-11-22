@@ -168,6 +168,16 @@ public func meetsClosed(_ a: Wf, _ b: Wf) throws -> Bool {
         returns: .value(Lungo.bool))
 }
 
+/// Lean's TaggedUrn.Exec.parts : TaggedUrn.Exec.Wf → String × List (String × TaggedUrn.Constraint)
+public func parts(_ w_: Wf) throws -> (String, [(String, Constraint)]) {
+    return try program.invoke(
+        entry(tagged_urn_formal__call_l_TaggedUrn_dExec_dparts), typeArgs: [],
+        args: { w in
+            try Wf.lungoType.encode(&w, w_)
+        },
+        returns: .value(Lungo.pair(Lungo.string, Lungo.list(Lungo.pair(Lungo.string, Constraint.lungoType)))))
+}
+
 /// Lean's TaggedUrn.Exec.refines : TaggedUrn.Exec.Wf → TaggedUrn.Exec.Wf → Bool
 public func refines(_ a: Wf, _ b: Wf) throws -> Bool {
     return try program.invoke(
@@ -471,11 +481,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 64,
+          "line": 81,
           "column": 1
         },
         "end": {
-          "line": 67,
+          "line": 84,
           "column": 74
         }
       }
@@ -506,11 +516,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 57,
+          "line": 74,
           "column": 1
         },
         "end": {
-          "line": 60,
+          "line": 77,
           "column": 75
         }
       }
@@ -539,11 +549,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 151,
+          "line": 168,
           "column": 1
         },
         "end": {
-          "line": 160,
+          "line": 177,
           "column": 12
         }
       }
@@ -572,11 +582,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 144,
+          "line": 161,
           "column": 1
         },
         "end": {
-          "line": 149,
+          "line": 166,
           "column": 21
         }
       }
@@ -605,11 +615,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 188,
+          "line": 205,
           "column": 1
         },
         "end": {
-          "line": 207,
+          "line": 224,
           "column": 46
         }
       }
@@ -638,11 +648,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 162,
+          "line": 179,
           "column": 1
         },
         "end": {
-          "line": 177,
+          "line": 194,
           "column": 12
         }
       }
@@ -671,11 +681,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 179,
+          "line": 196,
           "column": 1
         },
         "end": {
-          "line": 186,
+          "line": 203,
           "column": 67
         }
       }
@@ -710,6 +720,39 @@ public let assuranceJSON = #"""
         "end": {
           "line": 45,
           "column": 21
+        }
+      }
+    },
+    {
+      "name": "TaggedUrn.Exec.make_parts",
+      "relation": "lungo.law",
+      "subjects": [
+        "TaggedUrn.Exec.parts"
+      ],
+      "specifications": [],
+      "statement": "∀ (w : TaggedUrn.Exec.Wf),\n  Option.map (fun x => x.urn) (TaggedUrn.Exec.make (TaggedUrn.Exec.parts w).fst (TaggedUrn.Exec.parts w).snd) =\n    some w.urn",
+      "status": "proved",
+      "evidence_trust": {
+        "axioms": [
+          "Classical.choice",
+          "Quot.sound",
+          "propext"
+        ],
+        "depends_on_sorry": false
+      },
+      "assumptions": [],
+      "package": "tagged_urn_formal",
+      "fingerprint": "c8a0d59be68c4e53ad705b7f8e779e3815628db8b4e74448f5bc1571f7b75d45",
+      "source": {
+        "package": "tagged_urn_formal",
+        "file": "TaggedUrn/Exec.lean",
+        "start": {
+          "line": 57,
+          "column": 1
+        },
+        "end": {
+          "line": 62,
+          "column": 6
         }
       }
     },
@@ -772,11 +815,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 112,
+          "line": 129,
           "column": 1
         },
         "end": {
-          "line": 116,
+          "line": 133,
           "column": 16
         }
       }
@@ -807,12 +850,45 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 86,
+          "line": 103,
           "column": 1
         },
         "end": {
-          "line": 88,
+          "line": 105,
           "column": 90
+        }
+      }
+    },
+    {
+      "name": "TaggedUrn.Exec.parts_eq",
+      "relation": "lungo.law",
+      "subjects": [
+        "TaggedUrn.Exec.parts"
+      ],
+      "specifications": [],
+      "statement": "∀ (w : TaggedUrn.Exec.Wf), TaggedUrn.Exec.parts w = (w.urn.scheme, w.urn.tags) ∧ TaggedUrn.Sorted w.urn.tags",
+      "status": "proved",
+      "evidence_trust": {
+        "axioms": [
+          "Classical.choice",
+          "Quot.sound",
+          "propext"
+        ],
+        "depends_on_sorry": false
+      },
+      "assumptions": [],
+      "package": "tagged_urn_formal",
+      "fingerprint": "3c389a9c5b3d0b92c65d126c934395b16cc6b13be125931cdb80b1afa6d6bab3",
+      "source": {
+        "package": "tagged_urn_formal",
+        "file": "TaggedUrn/Exec.lean",
+        "start": {
+          "line": 52,
+          "column": 1
+        },
+        "end": {
+          "line": 55,
+          "column": 18
         }
       }
     },
@@ -842,11 +918,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 122,
+          "line": 139,
           "column": 1
         },
         "end": {
-          "line": 126,
+          "line": 143,
           "column": 34
         }
       }
@@ -877,11 +953,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 102,
+          "line": 119,
           "column": 1
         },
         "end": {
-          "line": 106,
+          "line": 123,
           "column": 16
         }
       }
@@ -912,11 +988,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 51,
+          "line": 68,
           "column": 1
         },
         "end": {
-          "line": 53,
+          "line": 70,
           "column": 94
         }
       }
@@ -947,11 +1023,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 72,
+          "line": 89,
           "column": 1
         },
         "end": {
-          "line": 73,
+          "line": 90,
           "column": 72
         }
       }
@@ -982,11 +1058,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 131,
+          "line": 148,
           "column": 1
         },
         "end": {
-          "line": 134,
+          "line": 151,
           "column": 33
         }
       }
@@ -1017,11 +1093,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 78,
+          "line": 95,
           "column": 1
         },
         "end": {
-          "line": 80,
+          "line": 97,
           "column": 85
         }
       }
@@ -1052,11 +1128,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 93,
+          "line": 110,
           "column": 1
         },
         "end": {
-          "line": 95,
+          "line": 112,
           "column": 84
         }
       }
@@ -1092,11 +1168,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 62,
+          "line": 79,
           "column": 1
         },
         "end": {
-          "line": 62,
+          "line": 79,
           "column": 63
         }
       }
@@ -1129,11 +1205,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 55,
+          "line": 72,
           "column": 1
         },
         "end": {
-          "line": 55,
+          "line": 72,
           "column": 63
         }
       }
@@ -1173,11 +1249,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 136,
+          "line": 153,
           "column": 1
         },
         "end": {
-          "line": 142,
+          "line": 159,
           "column": 12
         }
       }
@@ -1247,11 +1323,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 82,
+          "line": 99,
           "column": 1
         },
         "end": {
-          "line": 84,
+          "line": 101,
           "column": 75
         }
       }
@@ -1284,12 +1360,47 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 108,
+          "line": 125,
           "column": 1
         },
         "end": {
-          "line": 110,
+          "line": 127,
           "column": 81
+        }
+      }
+    },
+    {
+      "name": "TaggedUrn.Exec.parts",
+      "module": "TaggedUrn.Exec",
+      "async": false,
+      "trust": {
+        "axioms": [
+          "Classical.choice",
+          "Quot.sound",
+          "propext"
+        ],
+        "depends_on_sorry": false,
+        "unsafe_dependencies": [],
+        "partial_dependencies": [],
+        "extern_dependencies": []
+      },
+      "claims": [
+        "TaggedUrn.Exec.make_parts",
+        "TaggedUrn.Exec.parts_eq"
+      ],
+      "assumptions": [],
+      "facilities": [],
+      "roles": [],
+      "source": {
+        "package": "tagged_urn_formal",
+        "file": "TaggedUrn/Exec.lean",
+        "start": {
+          "line": 47,
+          "column": 1
+        },
+        "end": {
+          "line": 50,
+          "column": 87
         }
       }
     },
@@ -1321,11 +1432,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 47,
+          "line": 64,
           "column": 1
         },
         "end": {
-          "line": 49,
+          "line": 66,
           "column": 66
         }
       }
@@ -1358,11 +1469,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 118,
+          "line": 135,
           "column": 1
         },
         "end": {
-          "line": 120,
+          "line": 137,
           "column": 85
         }
       }
@@ -1395,11 +1506,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 97,
+          "line": 114,
           "column": 1
         },
         "end": {
-          "line": 100,
+          "line": 117,
           "column": 81
         }
       }
@@ -1431,11 +1542,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 69,
+          "line": 86,
           "column": 1
         },
         "end": {
-          "line": 70,
+          "line": 87,
           "column": 49
         }
       }
@@ -1463,11 +1574,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 75,
+          "line": 92,
           "column": 1
         },
         "end": {
-          "line": 76,
+          "line": 93,
           "column": 70
         }
       }
@@ -1497,11 +1608,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 128,
+          "line": 145,
           "column": 1
         },
         "end": {
-          "line": 129,
+          "line": 146,
           "column": 82
         }
       }
@@ -1531,11 +1642,11 @@ public let assuranceJSON = #"""
         "package": "tagged_urn_formal",
         "file": "TaggedUrn/Exec.lean",
         "start": {
-          "line": 90,
+          "line": 107,
           "column": 1
         },
         "end": {
-          "line": 91,
+          "line": 108,
           "column": 57
         }
       }

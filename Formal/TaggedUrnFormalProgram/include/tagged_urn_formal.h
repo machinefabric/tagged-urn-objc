@@ -70,6 +70,10 @@ int32_t tagged_urn_formal_meets(const lungo_value *a, const lungo_value *b, lung
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_meets_closed(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);
 
+/* TaggedUrn.Exec.parts : TaggedUrn.Exec.Wf → String × List (String × TaggedUrn.Constraint) */
+/* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
+int32_t tagged_urn_formal_parts(const lungo_value *w, lungo_value **result, lungo_error **error);
+
 /* TaggedUrn.Exec.refines : TaggedUrn.Exec.Wf → TaggedUrn.Exec.Wf → Bool */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_refines(const lungo_value *a, const lungo_value *b, lungo_value **result, lungo_error **error);

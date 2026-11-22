@@ -1541,6 +1541,20 @@
     XCTAssertEqual(error.code, CSTaggedUrnErrorPrefixMismatch);
 }
 
+// TEST7223: A URN read back from its model handle is the URN: its prefix and every tag, each form and a quoted value included
+- (void)test7223_urnReadBackFromItsHandle {
+    for (NSString *text in @[@"media:!a;?b;c?=v;d;e=v;f!=v;g=\"x y\"", @"cap:", @"media:pdf"]) {
+        NSError *error = nil;
+        CSTaggedUrn *urn = [CSTaggedUrn fromString:text error:&error];
+        XCTAssertNotNil(urn, @"%@: %@", text, error);
+        CSTaggedUrn *back = [CSTaggedUrn fromFormal:urn.formalValue error:&error];
+        XCTAssertNotNil(back, @"%@: %@", text, error);
+        XCTAssertEqualObjects(back.prefix, urn.prefix, @"%@", text);
+        XCTAssertEqualObjects(back.tags, urn.tags, @"%@", text);
+        XCTAssertEqualObjects(back, urn, @"%@", text);
+    }
+}
+
 // TEST7210: A written tag lets its key be absent exactly when it is !k, ?k or k?=v; a key the URN does not mention says nothing of it, so it allows absence too
 - (void)test7210_admitsAbsenceByForm {
     NSError *error = nil;

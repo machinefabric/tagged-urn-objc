@@ -10,6 +10,7 @@ int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dleastUpperBound(const uint8_t
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmake(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmeets(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dmeetsClosed(const uint8_t *input, size_t len, lungo_buffer *out);
+int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_dparts(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefines(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefinesBothClosed(const uint8_t *input, size_t len, lungo_buffer *out);
 int32_t tagged_urn_formal__call_l_TaggedUrn_dExec_drefinesClosed(const uint8_t *input, size_t len, lungo_buffer *out);
