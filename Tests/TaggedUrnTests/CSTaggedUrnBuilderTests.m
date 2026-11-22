@@ -302,8 +302,7 @@
     XCTAssertNil(urn);
     XCTAssertNotNil(error);
     XCTAssertEqual(error.code, CSTaggedUrnErrorEmptyTag);
-    XCTAssertTrue([error.localizedDescription containsString:@"Empty value"]);
-    XCTAssertTrue([error.localizedDescription containsString:@"use '*' for wildcard"]);
+    XCTAssertEqualObjects(error.localizedDescription, @"empty value for key 'key'");
 }
 
 @end
