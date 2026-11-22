@@ -94,6 +94,16 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)hasMarkerTag:(NSString * _Nonnull)tagName;
 
 /**
+ * Whether what this URN writes at `key` lets the key be absent: `!key`,
+ * `?key` and `key?=v` do, and so does a key the URN does not mention, which
+ * says nothing of it; `key`, `key=v` and `key!=v` do not. Decided by the
+ * model: absence satisfies the constraint.
+ * @param key The tag key
+ * @return YES if the key may be absent
+ */
+- (BOOL)admitsAbsence:(NSString * _Nonnull)key;
+
+/**
  * Create a new tagged URN with an added or updated tag
  * @param key The tag key
  * @param value The tag value
