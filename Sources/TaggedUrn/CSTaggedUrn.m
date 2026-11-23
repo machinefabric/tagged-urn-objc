@@ -24,6 +24,10 @@ NSErrorDomain const CSTaggedUrnErrorDomain = @"CSTaggedUrnErrorDomain";
 //   | `x=v`                    | `x=v`     | exact v        |     4 | present and exactly v         |
 //   | `!x` ≡ `x!` ≡ `x=!`      | `!x`      | absent         |     5 | absent (must-not-have)        |
 //
+// and a value separated by `|` into a set of values: `x=a|b` (one of), `x!=a|b` (there,
+// none of), `x?=a|b` (absent, or none of), and `x=a|b|!` (absent, or one of). A bare `!`
+// member says "or absent", and only without a qualifier.
+//
 // A quoted value is literal: `x="?v"` is the exact value `?v`, and `x="*"` the exact
 // value `*`, never the marker.
 typedef NS_ENUM(NSInteger, CSParseState) {
@@ -37,47 +41,91 @@ typedef NS_ENUM(NSInteger, CSParseState) {
     CSParseStateInUnquotedValue,
     CSParseStateInQuotedValue,
     CSParseStateInQuotedValueEscape,
-    CSParseStateExpectingSemiOrEnd
+    CSParseStateExpectingSemiOrEnd,
+    /// After `|` in a value: the next member of a set of values.
+    CSParseStateExpectingValueMember
 };
 
 static NSError *CSTaggedUrnMakeError(CSTaggedUrnError code, NSString *message) {
     return [NSError errorWithDomain:CSTaggedUrnErrorDomain code:code userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
+/// Two strings in code-point order: their UTF-8 bytes, the order Lean's String < uses.
+static NSComparisonResult CSCompareCodePoints(NSString *a, NSString *b) {
+    int c = strcmp(a.UTF8String, b.UTF8String);
+    return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+}
+
+/// Values each once, in increasing code-point order.
+static NSArray<NSString *> *CSCanonicalValues(NSArray<NSString *> *values) {
+    NSArray<NSString *> *sorted = [values sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
+        return CSCompareCodePoints(a, b);
+    }];
+    NSMutableArray<NSString *> *once = [NSMutableArray arrayWithCapacity:sorted.count];
+    for (NSString *v in sorted) {
+        if (![once.lastObject isEqualToString:v]) [once addObject:[v copy]];
+    }
+    return [once copy];
+}
+
 #pragma mark - CSTagConstraint
 
 @implementation CSTagConstraint
 
-- (instancetype)initWithKind:(CSTagConstraintKind)kind value:(nullable NSString *)value {
+/// A written constraint, its values made canonical; or missing, with no values.
+- (instancetype)initWithKind:(CSTagConstraintKind)kind
+                      absent:(BOOL)absent
+                  valuesKind:(CSTagValuesKind)valuesKind
+                      values:(nullable NSArray<NSString *> *)values {
     if (self = [super init]) {
         _kind = kind;
-        _value = [value copy];
+        if (kind == CSTagConstraintKindWritten) {
+            _absent = absent;
+            _valuesKind = valuesKind;
+            _values = CSCanonicalValues(values ?: @[]);
+        }
     }
     return self;
 }
 
-+ (instancetype)missing { return [[self alloc] initWithKind:CSTagConstraintKindMissing value:nil]; }
-+ (instancetype)unconstrained { return [[self alloc] initWithKind:CSTagConstraintKindUnconstrained value:nil]; }
-+ (instancetype)present { return [[self alloc] initWithKind:CSTagConstraintKindPresent value:nil]; }
-+ (instancetype)absent { return [[self alloc] initWithKind:CSTagConstraintKindAbsent value:nil]; }
-+ (instancetype)exact:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindExact value:value]; }
-+ (instancetype)optionalNot:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindOptionalNot value:value]; }
-+ (instancetype)presentNot:(NSString *)value { return [[self alloc] initWithKind:CSTagConstraintKindPresentNot value:value]; }
++ (instancetype)missing {
+    return [[self alloc] initWithKind:CSTagConstraintKindMissing absent:NO valuesKind:CSTagValuesKindOneOf values:nil];
+}
++ (instancetype)oneOf:(NSArray<NSString *> *)values orAbsent:(BOOL)orAbsent {
+    return [[self alloc] initWithKind:CSTagConstraintKindWritten absent:orAbsent valuesKind:CSTagValuesKindOneOf values:values];
+}
++ (instancetype)noneOf:(NSArray<NSString *> *)values orAbsent:(BOOL)orAbsent {
+    return [[self alloc] initWithKind:CSTagConstraintKindWritten absent:orAbsent valuesKind:CSTagValuesKindNoneOf values:values];
+}
++ (instancetype)unconstrained { return [self noneOf:@[] orAbsent:YES]; }
++ (instancetype)optionalNot:(NSString *)value { return [self noneOf:@[value] orAbsent:YES]; }
++ (instancetype)present { return [self noneOf:@[] orAbsent:NO]; }
++ (instancetype)presentNot:(NSString *)value { return [self noneOf:@[value] orAbsent:NO]; }
++ (instancetype)exact:(NSString *)value { return [self oneOf:@[value] orAbsent:NO]; }
++ (instancetype)absent { return [self oneOf:@[] orAbsent:YES]; }
 
-/// Whether this form carries a value.
-- (BOOL)carriesValue {
-    return self.kind == CSTagConstraintKindExact || self.kind == CSTagConstraintKindOptionalNot ||
-           self.kind == CSTagConstraintKindPresentNot;
+- (nullable NSString *)exactValue {
+    BOOL exact = self.kind == CSTagConstraintKindWritten && !self.absent &&
+                 self.valuesKind == CSTagValuesKindOneOf && self.values.count == 1;
+    return exact ? self.values[0] : nil;
+}
+
+- (BOOL)isEmptyForm {
+    return self.kind == CSTagConstraintKindWritten && !self.absent &&
+           self.valuesKind == CSTagValuesKindOneOf && self.values.count == 0;
 }
 
 - (BOOL)isEqual:(id)object {
     if (![object isKindOfClass:[CSTagConstraint class]]) return NO;
     CSTagConstraint *other = object;
-    return self.kind == other.kind && (self.value == other.value || [self.value isEqualToString:other.value]);
+    if (self.kind != other.kind) return NO;
+    if (self.kind == CSTagConstraintKindMissing) return YES;
+    return self.absent == other.absent && self.valuesKind == other.valuesKind &&
+           [self.values isEqualToArray:other.values];
 }
 
 - (NSUInteger)hash {
-    return (NSUInteger)self.kind ^ self.value.hash;
+    return (NSUInteger)self.kind ^ ((NSUInteger)self.absent << 1) ^ ((NSUInteger)self.valuesKind << 2) ^ self.values.hash;
 }
 
 - (id)copyWithZone:(NSZone *)zone {
@@ -85,8 +133,10 @@ static NSError *CSTaggedUrnMakeError(CSTaggedUrnError code, NSString *message) {
 }
 
 - (NSString *)description {
-    return self.value ? [NSString stringWithFormat:@"%ld(%@)", (long)self.kind, self.value]
-                      : [NSString stringWithFormat:@"%ld", (long)self.kind];
+    if (self.kind == CSTagConstraintKindMissing) return @"missing";
+    return [NSString stringWithFormat:@"written(absent: %@, %@: [%@])", self.absent ? @"YES" : @"NO",
+            self.valuesKind == CSTagValuesKindOneOf ? @"oneOf" : @"noneOf",
+            [self.values componentsJoinedByString:@", "]];
 }
 
 + (BOOL)supportsSecureCoding {
@@ -95,25 +145,35 @@ static NSError *CSTaggedUrnMakeError(CSTaggedUrnError code, NSString *message) {
 
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeInteger:self.kind forKey:@"kind"];
-    [coder encodeObject:self.value forKey:@"value"];
+    [coder encodeBool:self.absent forKey:@"absent"];
+    [coder encodeInteger:self.valuesKind forKey:@"valuesKind"];
+    [coder encodeObject:self.values forKey:@"values"];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
     NSInteger kind = [coder decodeIntegerForKey:@"kind"];
-    NSString *value = [coder decodeObjectOfClass:[NSString class] forKey:@"value"];
-    if (kind < CSTagConstraintKindMissing || kind > CSTagConstraintKindAbsent) {
+    NSInteger valuesKind = [coder decodeIntegerForKey:@"valuesKind"];
+    NSArray<NSString *> *values = [coder decodeArrayOfObjectsOfClass:[NSString class] forKey:@"values"];
+    if (kind != CSTagConstraintKindMissing && kind != CSTagConstraintKindWritten) {
         [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
                              [NSString stringWithFormat:@"no constraint has kind %ld", (long)kind])];
         return nil;
     }
-    CSTagConstraint *decoded = [self initWithKind:(CSTagConstraintKind)kind value:value];
-    if ([decoded carriesValue] != (value != nil)) {
+    if (kind == CSTagConstraintKindWritten && valuesKind != CSTagValuesKindOneOf && valuesKind != CSTagValuesKindNoneOf) {
         [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
-                             [NSString stringWithFormat:@"constraint kind %ld %@ a value", (long)kind,
-                              value ? @"carries no" : @"needs"])];
+                             [NSString stringWithFormat:@"no set of values has kind %ld", (long)valuesKind])];
         return nil;
     }
-    return decoded;
+    if ((kind == CSTagConstraintKindWritten) != (values != nil)) {
+        [coder failWithError:CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
+                             [NSString stringWithFormat:@"constraint kind %ld %@ values", (long)kind,
+                              values ? @"carries no" : @"needs"])];
+        return nil;
+    }
+    return [self initWithKind:(CSTagConstraintKind)kind
+                       absent:[coder decodeBoolForKey:@"absent"]
+                   valuesKind:(CSTagValuesKind)valuesKind
+                       values:values];
 }
 
 @end
@@ -156,31 +216,51 @@ static NSString *CSStringOfModel(const lungo_value *v) {
 static lungo_value *CSModelConstraint(CSTagConstraint *c) {
     switch (c.kind) {
         case CSTagConstraintKindMissing: return tagged_urn_formal_constraint_missing();
-        case CSTagConstraintKindUnconstrained: return tagged_urn_formal_constraint_unconstrained();
-        case CSTagConstraintKindOptionalNot: return tagged_urn_formal_constraint_optional_not(CSModelString(c.value));
-        case CSTagConstraintKindPresent: return tagged_urn_formal_constraint_present();
-        case CSTagConstraintKindPresentNot: return tagged_urn_formal_constraint_present_not(CSModelString(c.value));
-        case CSTagConstraintKindExact: return tagged_urn_formal_constraint_exact(CSModelString(c.value));
-        case CSTagConstraintKindAbsent: return tagged_urn_formal_constraint_absent();
+        case CSTagConstraintKindWritten: {
+            NSArray<NSString *> *values = c.values;
+            lungo_value **items = values.count ? calloc(values.count, sizeof(lungo_value *)) : NULL;
+            for (NSUInteger i = 0; i < values.count; i++) {
+                items[i] = CSModelString(values[i]);
+            }
+            lungo_value *vs = lungo_value_list(items, values.count);
+            free(items);
+            lungo_value *set = c.valuesKind == CSTagValuesKindOneOf ? tagged_urn_formal_values_one_of(vs)
+                                                                     : tagged_urn_formal_values_none_of(vs);
+            return tagged_urn_formal_constraint_written(lungo_value_bool(c.absent), set);
+        }
     }
     @throw [NSException exceptionWithName:NSInternalInconsistencyException
                                    reason:[NSString stringWithFormat:@"tagged-urn: no constraint has kind %ld", (long)c.kind]
                                  userInfo:nil];
 }
 
-/// A constraint the model returned, read by its constructor.
+/// A list of strings the model returned.
+static NSArray<NSString *> *CSStringsOfModel(const lungo_value *list) {
+    NSMutableArray<NSString *> *strings = [NSMutableArray arrayWithCapacity:lungo_value_count(list)];
+    for (size_t i = 0; i < lungo_value_count(list); i++) {
+        [strings addObject:CSStringOfModel(lungo_value_item(list, i))];
+    }
+    return strings;
+}
+
+/// A constraint the model returned, read by its constructors.
 static CSTagConstraint *CSConstraintOfModel(const lungo_value *v) {
     switch (lungo_value_ctor_index(v)) {
         case TAGGED_URN_FORMAL_CONSTRAINT_MISSING: return [CSTagConstraint missing];
-        case TAGGED_URN_FORMAL_CONSTRAINT_UNCONSTRAINED: return [CSTagConstraint unconstrained];
-        case TAGGED_URN_FORMAL_CONSTRAINT_OPTIONAL_NOT:
-            return [CSTagConstraint optionalNot:CSStringOfModel(tagged_urn_formal_constraint_optional_not_value(v))];
-        case TAGGED_URN_FORMAL_CONSTRAINT_PRESENT: return [CSTagConstraint present];
-        case TAGGED_URN_FORMAL_CONSTRAINT_PRESENT_NOT:
-            return [CSTagConstraint presentNot:CSStringOfModel(tagged_urn_formal_constraint_present_not_value(v))];
-        case TAGGED_URN_FORMAL_CONSTRAINT_EXACT:
-            return [CSTagConstraint exact:CSStringOfModel(tagged_urn_formal_constraint_exact_value(v))];
-        case TAGGED_URN_FORMAL_CONSTRAINT_ABSENT: return [CSTagConstraint absent];
+        case TAGGED_URN_FORMAL_CONSTRAINT_WRITTEN: {
+            BOOL absent = lungo_value_get_bool(tagged_urn_formal_constraint_written_absent(v));
+            const lungo_value *values = tagged_urn_formal_constraint_written_values(v);
+            switch (lungo_value_ctor_index(values)) {
+                case TAGGED_URN_FORMAL_VALUES_ONE_OF:
+                    return [CSTagConstraint oneOf:CSStringsOfModel(tagged_urn_formal_values_one_of_vs(values)) orAbsent:absent];
+                case TAGGED_URN_FORMAL_VALUES_NONE_OF:
+                    return [CSTagConstraint noneOf:CSStringsOfModel(tagged_urn_formal_values_none_of_vs(values)) orAbsent:absent];
+            }
+            @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                           reason:[NSString stringWithFormat:@"tagged-urn: the model returned values constructor %u",
+                                                   lungo_value_ctor_index(values)]
+                                         userInfo:nil];
+        }
     }
     @throw [NSException exceptionWithName:NSInternalInconsistencyException
                                    reason:[NSString stringWithFormat:@"tagged-urn: the model returned constraint constructor %u",
@@ -216,10 +296,10 @@ static BOOL CSIsValidKeyChar(unichar c) {
     return CSIsIdentifierStart(c) || (c >= '0' && c <= '9') || c == '-';
 }
 
-/// Whether a character may stand in an unquoted value: anything but the separators `;` `=`,
-/// the quoting characters `"` `\`, and whitespace.
+/// Whether a character may stand in an unquoted value: anything but the separators `;` `=`
+/// `|`, the quoting characters `"` `\`, and whitespace.
 static BOOL CSIsValidUnquotedValueChar(unichar c) {
-    return c != ';' && c != '=' && c != '"' && c != '\\' &&
+    return c != ';' && c != '=' && c != '|' && c != '"' && c != '\\' &&
            ![[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:c];
 }
 
@@ -254,7 +334,7 @@ static NSString * _Nullable CSIdentifier(NSString *what, NSString *s, NSError **
 }
 
 /// Refuses a constraint a URN cannot write for `key`: missing (a key with no constraint is
-/// omitted), or an empty value.
+/// omitted), the empty form (no state at all, which no text writes), or an empty value.
 static BOOL CSCheckConstraint(NSString *key, CSTagConstraint * _Nullable c, NSError **error) {
     if (c == nil || ![c isKindOfClass:[CSTagConstraint class]] || c.kind == CSTagConstraintKindMissing) {
         if (error) {
@@ -263,7 +343,14 @@ static BOOL CSCheckConstraint(NSString *key, CSTagConstraint * _Nullable c, NSEr
         }
         return NO;
     }
-    if ([c carriesValue] && c.value.length == 0) {
+    if (c.isEmptyForm) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidTagFormat,
+                [NSString stringWithFormat:@"key '%@' given a constraint no state satisfies: no text writes it", key]);
+        }
+        return NO;
+    }
+    if ([c.values containsObject:@""]) {
         if (error) {
             *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag, [NSString stringWithFormat:@"empty value for key '%@'", key]);
         }
@@ -345,11 +432,88 @@ static CSTagConstraint * _Nullable CSCanonicalizeValue(char qualifier, BOOL quot
     return CSQualified(qualifier, [value copy]);
 }
 
+/// The constraint a set of values writes, from its members, each an array of the value and
+/// whether it was quoted (@YES, @NO):
+///
+///   (0,   a|b)    -> one of a, b          (`k=a|b`)
+///   (0,   a|b|!)  -> absent, or one of    (`k=a|b|!`)
+///   ('!', a|b)    -> there, none of       (`k!=a|b`)
+///   ('?', a|b)    -> absent, or none of   (`k?=a|b`)
+///
+/// A bare `!` member says "or absent", and only in `k=`. Every other member is a value: a
+/// quoted one is literal, and a bare `*`, `?`, `!` under a qualifier, or a bare member
+/// beginning with `?` or `!`, is refused — quote it to mean the value itself. A value given
+/// twice is refused.
+static CSTagConstraint * _Nullable CSCanonicalizeSet(char qualifier, NSString *key, NSArray<NSArray *> *members, NSError **error) {
+    NSMutableArray<NSString *> *values = [NSMutableArray arrayWithCapacity:members.count];
+    BOOL orAbsent = NO;
+    for (NSArray *member in members) {
+        NSString *value = member[0];
+        BOOL quoted = [member[1] boolValue];
+        if (value.length == 0) {
+            if (error) {
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
+                    [NSString stringWithFormat:@"empty value in the set of values for key '%@'", key]);
+            }
+            return nil;
+        }
+        if (!quoted && [value isEqualToString:@"!"] && qualifier == 0) {
+            if (orAbsent) {
+                if (error) {
+                    *error = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateValue,
+                        [NSString stringWithFormat:@"'!' given twice in the set of values for key '%@'", key]);
+                }
+                return nil;
+            }
+            orAbsent = YES;
+            continue;
+        }
+        if (!quoted && ([value isEqualToString:@"*"] || [value isEqualToString:@"?"] ||
+                        [value hasPrefix:@"?"] || [value hasPrefix:@"!"])) {
+            if (error) {
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
+                    [NSString stringWithFormat:@"'%@' cannot stand in the set of values for key '%@': quote it to mean the value itself", value, key]);
+            }
+            return nil;
+        }
+        if ([values containsObject:value]) {
+            if (error) {
+                *error = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateValue,
+                    [NSString stringWithFormat:@"value '%@' given twice in the set of values for key '%@'", value, key]);
+            }
+            return nil;
+        }
+        [values addObject:value];
+    }
+    if (values.count == 0) {
+        if (error) {
+            *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
+                [NSString stringWithFormat:@"the set of values for key '%@' names no value", key]);
+        }
+        return nil;
+    }
+    switch (qualifier) {
+        case 0:   return [CSTagConstraint oneOf:values orAbsent:orAbsent];
+        case '?': return [CSTagConstraint noneOf:values orAbsent:YES];
+        case '!': return [CSTagConstraint noneOf:values orAbsent:NO];
+    }
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                   reason:[NSString stringWithFormat:@"invalid qualifier %d", qualifier]
+                                 userInfo:nil];
+}
+
+/// The constraint a parsed value writes: a single value as CSCanonicalizeValue reads it, or a
+/// set of values (the members read so far, then the last) as CSCanonicalizeSet does.
+static CSTagConstraint * _Nullable CSFinishValue(char qualifier, NSString *key, NSArray<NSArray *> *members,
+                                                 NSString *last, BOOL quoted, NSError **error) {
+    if (members.count == 0) return CSCanonicalizeValue(qualifier, quoted, key, last, error);
+    return CSCanonicalizeSet(qualifier, key, [members arrayByAddingObject:@[[last copy], @(quoted)]], error);
+}
+
 /// Keys in code-point order: their UTF-8 bytes, the order Lean's String < uses.
 static NSArray<NSString *> *CSSortedKeys(NSArray<NSString *> *keys) {
     return [keys sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
-        int c = strcmp(a.UTF8String, b.UTF8String);
-        return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+        return CSCompareCodePoints(a, b);
     }];
 }
 
@@ -489,8 +653,8 @@ static NSArray<NSString *> *CSSortedKeys(NSArray<NSString *> *keys) {
 /// Inserts the tag being parsed (nil when making its constraint failed, with the error set),
 /// refusing a key given twice, and readies the parser for the next tag.
 static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags, NSMutableString *key,
-                        NSMutableString *value, char *qualifier, CSTagConstraint * _Nullable constraint,
-                        NSError **error) {
+                        NSMutableString *value, NSMutableArray<NSArray *> *members, char *qualifier,
+                        CSTagConstraint * _Nullable constraint, NSError **error) {
     if (constraint == nil) return NO;
     if (tags[key] != nil) {
         if (error) *error = CSTaggedUrnMakeError(CSTaggedUrnErrorDuplicateKey, [NSString stringWithFormat:@"Duplicate tag key: %@", key]);
@@ -499,6 +663,7 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     tags[[key copy]] = constraint;
     [key setString:@""];
     [value setString:@""];
+    [members removeAllObjects];
     *qualifier = 0;
     return YES;
 }
@@ -549,6 +714,9 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     // qualifier has been seen for the tag currently being parsed.
     // Reset to 0 on each finished tag.
     char qualifier = 0;
+    // The members of a set of values read so far (`k=a|b`), each the value and whether it
+    // was quoted; empty while the value is a single one.
+    NSMutableArray<NSArray *> *members = [NSMutableArray array];
 
     while (pos < tagsPart.length) {
         unichar c = [tagsPart characterAtIndex:pos];
@@ -604,7 +772,7 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
                     qualifier = (char)c;
                     state = c == '?' ? CSParseStateInKeyAfterQuestion : CSParseStateInKeyAfterBang;
                 } else if (c == ';') {
-                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
+                    if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
                     state = CSParseStateExpectingKey;
                 } else if (CSIsValidKeyChar(c)) {
                     [currentKey appendFormat:@"%C", CSAsciiLower(c)];
@@ -622,7 +790,7 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
                 if (c == '=') {
                     state = CSParseStateExpectingValue;
                 } else if (c == ';') {
-                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
+                    if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
                     state = CSParseStateExpectingKey;
                 } else {
                     if (error) {
@@ -634,6 +802,7 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
                 break;
 
             case CSParseStateExpectingValue:
+            case CSParseStateExpectingValueMember:
                 if (c == '"') {
                     state = CSParseStateInQuotedValue;
                 } else if (c == ';') {
@@ -656,8 +825,12 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
 
             case CSParseStateInUnquotedValue:
                 if (c == ';') {
-                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, NO, currentKey, currentValue, error), error)) return nil;
+                    if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSFinishValue(qualifier, currentKey, members, currentValue, NO, error), error)) return nil;
                     state = CSParseStateExpectingKey;
+                } else if (c == '|') {
+                    [members addObject:@[[currentValue copy], @NO]];
+                    [currentValue setString:@""];
+                    state = CSParseStateExpectingValueMember;
                 } else if (CSIsValidUnquotedValueChar(c)) {
                     [currentValue appendFormat:@"%C", CSAsciiLower(c)];
                 } else {
@@ -694,12 +867,16 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
 
             case CSParseStateExpectingSemiOrEnd:
                 if (c == ';') {
-                    if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, YES, currentKey, currentValue, error), error)) return nil;
+                    if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSFinishValue(qualifier, currentKey, members, currentValue, YES, error), error)) return nil;
                     state = CSParseStateExpectingKey;
+                } else if (c == '|') {
+                    [members addObject:@[[currentValue copy], @YES]];
+                    [currentValue setString:@""];
+                    state = CSParseStateExpectingValueMember;
                 } else {
                     if (error) {
                         *error = CSTaggedUrnMakeError(CSTaggedUrnErrorInvalidCharacter,
-                            [NSString stringWithFormat:@"expected ';' or end after quoted value, got '%C' at position %lu", c, (unsigned long)pos]);
+                            [NSString stringWithFormat:@"expected ';', '|' or end after quoted value, got '%C' at position %lu", c, (unsigned long)pos]);
                     }
                     return nil;
                 }
@@ -712,10 +889,10 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     // Handle end of input
     switch (state) {
         case CSParseStateInUnquotedValue:
-            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, NO, currentKey, currentValue, error), error)) return nil;
+            if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSFinishValue(qualifier, currentKey, members, currentValue, NO, error), error)) return nil;
             break;
         case CSParseStateExpectingSemiOrEnd:
-            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalizeValue(qualifier, YES, currentKey, currentValue, error), error)) return nil;
+            if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSFinishValue(qualifier, currentKey, members, currentValue, YES, error), error)) return nil;
             break;
         case CSParseStateExpectingKey:
             break;
@@ -736,9 +913,10 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
         case CSParseStateInKey:
         case CSParseStateInKeyAfterQuestion:
         case CSParseStateInKeyAfterBang:
-            if (!CSFinishTag(tags, currentKey, currentValue, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
+            if (!CSFinishTag(tags, currentKey, currentValue, members, &qualifier, CSCanonicalNoValue(qualifier), error)) return nil;
             break;
         case CSParseStateExpectingValue:
+        case CSParseStateExpectingValueMember:
             if (error) {
                 *error = CSTaggedUrnMakeError(CSTaggedUrnErrorEmptyTag,
                     [NSString stringWithFormat:@"empty value for key '%@'", currentKey]);
@@ -852,11 +1030,11 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
 }
 
 - (BOOL)hasTag:(NSString *)key withValue:(NSString *)value {
-    return [[self getTag:key] isEqual:[CSTagConstraint exact:value]];
+    return [[self getTag:key].exactValue isEqualToString:value];
 }
 
 - (BOOL)hasMarkerTag:(NSString *)tagName {
-    return [self getTag:tagName].kind == CSTagConstraintKindPresent;
+    return [[self getTag:tagName] isEqual:[CSTagConstraint present]];
 }
 
 - (BOOL)admitsAbsence:(NSString *)key {
@@ -1146,7 +1324,7 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return NO;
 }
 
-/// Calculate specificity score, as the model computes it: the sum of per-tag truth-table scores.
+/// Calculate specificity score, as the model computes it: the sum of per-tag scores.
 - (NSUInteger)specificity {
     lungo_value *result = NULL;
     lungo_error *error = NULL;
@@ -1162,32 +1340,37 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return (NSUInteger)score;
 }
 
-/// How many tags fall into each non-zero form, from the highest score to the lowest:
-/// (absent, exact, presentNot, present, optionalNot)
+/// How many tags score 5, 4, 3, 2 and 1 (TaggedUrn.Exec.tagSpecificity), named by the written
+/// form of each score: (absent, exact, presentNot, present, optionalNot)
 - (void)specificityTupleMustNotHave:(NSUInteger *)mustNotHave
                               exact:(NSUInteger *)exact
                    presentNotValue:(NSUInteger *)presentNotValue
                        mustHaveAny:(NSUInteger *)mustHaveAny
                   absentOrNotValue:(NSUInteger *)absentOrNotValue {
-    *mustNotHave = 0;
-    *exact = 0;
-    *presentNotValue = 0;
-    *mustHaveAny = 0;
-    *absentOrNotValue = 0;
+    NSUInteger counts[6] = {0, 0, 0, 0, 0, 0};
     for (CSTagConstraint *c in self.storedTags.allValues) {
-        switch (c.kind) {
-            case CSTagConstraintKindAbsent:        (*mustNotHave)++; break;
-            case CSTagConstraintKindExact:         (*exact)++; break;
-            case CSTagConstraintKindPresentNot:    (*presentNotValue)++; break;
-            case CSTagConstraintKindPresent:       (*mustHaveAny)++; break;
-            case CSTagConstraintKindOptionalNot:   (*absentOrNotValue)++; break;
-            case CSTagConstraintKindUnconstrained: break;
-            case CSTagConstraintKindMissing:
-                @throw [NSException exceptionWithName:NSInternalInconsistencyException
-                                               reason:@"tagged-urn: a stored tag is missing"
-                                             userInfo:nil];
+        lungo_value *constraint = CSModelConstraint(c);
+        lungo_value *result = NULL;
+        lungo_error *error = NULL;
+        int32_t status = tagged_urn_formal_tag_specificity(constraint, &result, &error);
+        lungo_value_free(constraint);
+        if (status != LUNGO_OK) CSModelFailed(@"score a tag", error);
+        uint64_t score = 0;
+        BOOL fits = lungo_value_get_nat(result, &score);
+        lungo_value_free(result);
+        if (!fits || score > 5) {
+            @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                           reason:[NSString stringWithFormat:@"tagged-urn: a tag of %@ scored %llu; a tag's score is at most 5",
+                                                   [self toString], score]
+                                         userInfo:nil];
         }
+        counts[score]++;
     }
+    *mustNotHave = counts[5];
+    *exact = counts[4];
+    *presentNotValue = counts[3];
+    *mustHaveAny = counts[2];
+    *absentOrNotValue = counts[1];
 }
 
 - (BOOL)isMoreSpecificThan:(CSTaggedUrn *)other error:(NSError **)error {
@@ -1213,10 +1396,31 @@ static BOOL CSFinishTag(NSMutableDictionary<NSString *, CSTagConstraint *> *tags
     return self.specificity > other.specificity;
 }
 
-/// Two strings in code-point order: their UTF-8 bytes, the order Lean's String < uses.
-static NSComparisonResult CSCompareCodePoints(NSString *a, NSString *b) {
-    int c = strcmp(a.UTF8String, b.UTF8String);
-    return c < 0 ? NSOrderedAscending : (c > 0 ? NSOrderedDescending : NSOrderedSame);
+/// A stored constraint's form's place in the order of URNs, the truth table's:
+/// `?k`, `k?=…`, `k=…|!`, `k`, `k!=…`, `k=…`, `!k`.
+static NSInteger CSFormOrder(CSTagConstraint *c) {
+    if (c.kind != CSTagConstraintKindWritten) {
+        @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                       reason:@"tagged-urn: a stored tag is missing"
+                                     userInfo:nil];
+    }
+    BOOL none = c.values.count == 0;
+    if (c.valuesKind == CSTagValuesKindNoneOf) {
+        if (c.absent) return none ? 0 : 1;
+        return none ? 3 : 4;
+    }
+    if (c.absent) return none ? 6 : 2;
+    return 5;
+}
+
+/// Two lists of values in order: value by value, a list that is the beginning of another first.
+static NSComparisonResult CSCompareValueLists(NSArray<NSString *> *a, NSArray<NSString *> *b) {
+    for (NSUInteger i = 0; i < MIN(a.count, b.count); i++) {
+        NSComparisonResult byValue = CSCompareCodePoints(a[i], b[i]);
+        if (byValue != NSOrderedSame) return byValue;
+    }
+    if (a.count == b.count) return NSOrderedSame;
+    return a.count < b.count ? NSOrderedAscending : NSOrderedDescending;
 }
 
 - (NSComparisonResult)compare:(CSTaggedUrn *)other {
@@ -1229,10 +1433,11 @@ static NSComparisonResult CSCompareCodePoints(NSString *a, NSString *b) {
         if (byKey != NSOrderedSame) return byKey;
         CSTagConstraint *a = self.storedTags[keysA[i]];
         CSTagConstraint *b = other.storedTags[keysB[i]];
-        // The kinds are declared in the truth table's order.
-        if (a.kind != b.kind) return a.kind < b.kind ? NSOrderedAscending : NSOrderedDescending;
-        NSComparisonResult byValue = CSCompareCodePoints(a.value ?: @"", b.value ?: @"");
-        if (byValue != NSOrderedSame) return byValue;
+        NSInteger formA = CSFormOrder(a);
+        NSInteger formB = CSFormOrder(b);
+        if (formA != formB) return formA < formB ? NSOrderedAscending : NSOrderedDescending;
+        NSComparisonResult byValues = CSCompareValueLists(a.values, b.values);
+        if (byValues != NSOrderedSame) return byValues;
     }
     if (keysA.count == keysB.count) return NSOrderedSame;
     return keysA.count < keysB.count ? NSOrderedAscending : NSOrderedDescending;
@@ -1287,36 +1492,34 @@ static NSComparisonResult CSCompareCodePoints(NSString *a, NSString *b) {
 }
 
 /// The canonical string: the prefix, `:`, and the tags in key order joined by `;`. Each
-/// constraint is written in its canonical form — present `k`, unconstrained `?k`, absent `!k`,
-/// optionalNot `k?=v`, presentNot `k!=v`, exact `k=v` — with a value quoted only when it must
-/// be to read back as itself (exact `*` prints `k="*"`).
+/// constraint is written in its canonical form — there with any value `k`, any state `?k`,
+/// absent `!k`, absent or none of `k?=a|b`, there and none of `k!=a|b`, there and one of
+/// `k=a|b`, absent or one of `k=a|b|!` — a set's values each once, in increasing order, and a
+/// value quoted only when it must be to read back as itself (exact `*` prints `k="*"`).
 - (NSString *)toString {
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     for (NSString *key in CSSortedKeys(self.storedTags.allKeys)) {
         CSTagConstraint *c = self.storedTags[key];
-        switch (c.kind) {
-            case CSTagConstraintKindPresent:
-                [parts addObject:key];
-                break;
-            case CSTagConstraintKindUnconstrained:
-                [parts addObject:[NSString stringWithFormat:@"?%@", key]];
-                break;
-            case CSTagConstraintKindAbsent:
-                [parts addObject:[NSString stringWithFormat:@"!%@", key]];
-                break;
-            case CSTagConstraintKindOptionalNot:
-                [parts addObject:[NSString stringWithFormat:@"%@?=%@", key, [CSTaggedUrn writeValue:c.value]]];
-                break;
-            case CSTagConstraintKindPresentNot:
-                [parts addObject:[NSString stringWithFormat:@"%@!=%@", key, [CSTaggedUrn writeValue:c.value]]];
-                break;
-            case CSTagConstraintKindExact:
-                [parts addObject:[NSString stringWithFormat:@"%@=%@", key, [CSTaggedUrn writeValue:c.value]]];
-                break;
-            case CSTagConstraintKindMissing:
-                @throw [NSException exceptionWithName:NSInternalInconsistencyException
-                                               reason:[NSString stringWithFormat:@"tagged-urn: key '%@' is stored as missing", key]
-                                             userInfo:nil];
+        if (c.kind != CSTagConstraintKindWritten || c.isEmptyForm) {
+            @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                           reason:[NSString stringWithFormat:@"tagged-urn: key '%@' is stored as %@", key, c]
+                                         userInfo:nil];
+        }
+        NSMutableArray<NSString *> *written = [NSMutableArray arrayWithCapacity:c.values.count];
+        for (NSString *v in c.values) {
+            [written addObject:[CSTaggedUrn writeValue:v]];
+        }
+        NSString *set = [written componentsJoinedByString:@"|"];
+        if (c.valuesKind == CSTagValuesKindNoneOf) {
+            if (c.values.count == 0) {
+                [parts addObject:c.absent ? [NSString stringWithFormat:@"?%@", key] : key];
+            } else {
+                [parts addObject:[NSString stringWithFormat:c.absent ? @"%@?=%@" : @"%@!=%@", key, set]];
+            }
+        } else if (c.values.count == 0) {
+            [parts addObject:[NSString stringWithFormat:@"!%@", key]];
+        } else {
+            [parts addObject:[NSString stringWithFormat:c.absent ? @"%@=%@|!" : @"%@=%@", key, set]];
         }
     }
     return [NSString stringWithFormat:@"%@:%@", self.mutablePrefix, [parts componentsJoinedByString:@";"]];

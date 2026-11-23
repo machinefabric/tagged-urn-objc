@@ -5,13 +5,13 @@ Objective-C implementation of Tagged URN with strict validation, pattern matchin
 ## Features
 
 - **Strict Rule Enforcement** - Follows exact same rules as Rust, Go, and JavaScript implementations
-- **Six Tag Forms** - exact `k=v`, present `k`, absent `!k`, unconstrained `?k`, `k?=v` (absent or not v), `k!=v` (present and not v)
-- **Typed Tags** - Each tag is stored as the constraint it writes (`CSTagConstraint`: a kind and, for three kinds, a value)
+- **Tag Forms** - exact `k=v`, present `k`, absent `!k`, unconstrained `?k`, `k?=v` (absent or not v), `k!=v` (present and not v), and sets of values: `k=a|b` (one of), `k!=a|b` (none of), `k?=a|b` (absent or none of), `k=a|b|!` (absent or one of)
+- **Typed Tags** - Each tag is stored as the constraint it writes (`CSTagConstraint`, the proved model's constraint: whether the key may be absent, and the values it may have, `oneOf`, or may not, `noneOf`)
 - **Identifiers** - The prefix and every key are an ASCII letter followed by ASCII letters, digits and `-`
 - **Case Insensitive** - The prefix, keys and unquoted values are lowered; quoted values keep their case
 - **Literal Quoting** - A quoted value is always the literal value: `x="*"` is the exact value `*`
 - **Tag Order Independent** - Canonical alphabetical sorting
-- **Graded Specificity** - `?k` 0, `k?=v` 1, `k` 2, `k!=v` 3, `k=v` 4, `!k` 5
+- **Graded Specificity** - `?k` 0, `k?=v` and `k=v|!` 1, `k` 2, `k!=v` and `k=a|b` 3, `k=v` 4, `!k` 5
 - **Swift Compatible** - Full Swift interoperability via Objective-C bridge
 - **NSSecureCoding** - Secure serialization support
 
@@ -52,7 +52,9 @@ CSTaggedUrn *built = [[[[[CSTaggedUrnBuilder builderWithPrefix:@"cap"]
     tag:@"debug" constraint:[CSTagConstraint absent]]
     build:&error];
 // [built toString] is "cap:!debug;extract;format=pdf"
-// [built getTag:@"format"] is [CSTagConstraint exact:@"pdf"]
+// [built getTag:@"format"] is [CSTagConstraint exact:@"pdf"], whose exactValue is @"pdf"
+// [[CSTaggedUrn fromString:@"media:ext=png|jpeg" error:&error] getTag:@"ext"]
+//   is [CSTagConstraint oneOf:@[@"jpeg", @"png"] orAbsent:NO]
 
 // Check matching
 CSTaggedUrn *pattern = [CSTaggedUrn fromString:@"cap:generate" error:&error];
@@ -70,7 +72,7 @@ import TaggedUrn
 do {
     let urn = try CSTaggedUrn.fromString("cap:generate;ext=pdf")
     print("Has generate marker: \(urn.hasMarkerTag("generate"))")   // true
-    print("ext: \(urn.getTag("ext")?.value ?? "nil")")               // "pdf"
+    print("ext: \(urn.getTag("ext")?.exactValue ?? "nil")")          // "pdf"
     print("Canonical: \(urn.toString())")                            // "cap:ext=pdf;generate"
 } catch {
     print("Parse error: \(error)")
@@ -108,7 +110,7 @@ if try urn.conforms(to: pattern) {
 | `-accepts:error:` | Check if URN (as pattern) accepts an instance |
 | `-specificity` | Get graded specificity score |
 | `-isMoreSpecificThan:error:` | Compare specificity with another URN |
-| `-compare:` | Order by parts: prefix, then each tag by key, constraint form, value |
+| `-compare:` | Order by parts: prefix, then each tag by key, constraint form, values |
 | `+writeValue:` | A value as a tag writes it: bare, or quoted when it must be |
 | `+leastUpperBoundWithPrefix:urns:error:` | The most specific URN every one of `urns` conforms to, made by the proved model |
 | `-toString` | Get canonical string representation |
@@ -123,6 +125,28 @@ if try urn.conforms(to: pattern) {
 | `-tag:constraint:` | Add a tag of any form (chainable) |
 | `-build:` | Build the URN (nil with the first error a tag met) |
 | `-buildAllowEmpty:` | Build URN allowing empty tags |
+
+### CSTagConstraint
+
+The proved model's constraint for one key: `kind` (`Missing`, for a key a URN does not
+mention and never stored, or `Written`), `absent` (whether the key may be absent),
+`valuesKind` (`OneOf`: the values it may have; `NoneOf`: the values it may not) and
+`values` (each once, in increasing code-point order).
+
+| Text | Constraint |
+|------|------------|
+| `k` | `[CSTagConstraint present]`, none of no values |
+| `?k` | `[CSTagConstraint unconstrained]`, absent or none of no values |
+| `!k` | `[CSTagConstraint absent]`, absent or one of no values |
+| `k=v` | `[CSTagConstraint exact:v]`, one of `v` |
+| `k!=v` | `[CSTagConstraint presentNot:v]`, none of `v` |
+| `k?=v` | `[CSTagConstraint optionalNot:v]`, absent or none of `v` |
+| `k=a\|b` | `[CSTagConstraint oneOf:@[a, b] orAbsent:NO]` |
+| `k=a\|b\|!` | `[CSTagConstraint oneOf:@[a, b] orAbsent:YES]` |
+| `k!=a\|b` | `[CSTagConstraint noneOf:@[a, b] orAbsent:NO]` |
+| `k?=a\|b` | `[CSTagConstraint noneOf:@[a, b] orAbsent:YES]` |
+
+`exactValue` is the value of `k=v`, and nil for any other form.
 
 ## Matching Semantics
 
@@ -155,14 +179,16 @@ from them.
 
 ## Graded Specificity
 
-| Form | Score |
-|------|-------|
-| Unconstrained (`?K`) or missing | 0 |
-| Absent or not v (`K?=v`) | 1 |
-| Present (`K`) | 2 |
-| Present and not v (`K!=v`) | 3 |
-| Exact value (`K=v`) | 4 |
-| Absent (`!K`) | 5 |
+Each tag scores by what it allows:
+
+| What the key allows | e.g. | Score |
+|---------------------|------|-------|
+| Absence and every value, or the key is missing | `?K` | 0 |
+| Absence and some values, not every value | `K?=v`, `K=v\|!` | 1 |
+| Every value | `K` | 2 |
+| Two or more values, not every value | `K!=v`, `K=a\|b` | 3 |
+| Exactly one value | `K=v` | 4 |
+| Only absence | `!K` | 5 |
 
 ## Error Codes
 
@@ -171,7 +197,7 @@ from them.
 | 1 | InvalidFormat | Empty or malformed URN |
 | 2 | EmptyTag | Empty key or value component |
 | 3 | InvalidCharacter | Disallowed character in prefix, key or value |
-| 4 | InvalidTagFormat | Tag not in key=value format |
+| 4 | InvalidTagFormat | A tag given no constraint, or one no text writes |
 | 5 | MissingPrefix | URN does not start with prefix |
 | 6 | DuplicateKey | Same key appears twice |
 | 8 | UnterminatedQuote | Quoted value never closed |
@@ -179,6 +205,7 @@ from them.
 | 10 | EmptyPrefix | Prefix is empty |
 | 11 | PrefixMismatch | Prefixes don't match in comparison |
 | 12 | WhitespaceInInput | Input has leading or trailing whitespace |
+| 13 | DuplicateValue | A value given twice in one tag's set of values |
 
 ## Testing
 

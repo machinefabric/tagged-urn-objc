@@ -1519,7 +1519,7 @@
                    [wrong subarrayWithRange:NSMakeRange(0, MIN(8u, wrong.count))]);
 }
 
-// TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as "some value", the coarser of two comparable URNs, nothing for none, and another prefix refused
+// TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as the set of those values, the coarser of two comparable URNs, nothing for none, and another prefix refused
 - (void)test392_leastUpperBound {
     NSError *error = nil;
     CSTaggedUrn *(^p)(NSString *) = ^CSTaggedUrn *(NSString *s) { return [CSTaggedUrn fromString:s error:nil]; };
@@ -1529,7 +1529,7 @@
         return [[CSTaggedUrn leastUpperBoundWithPrefix:@"media" urns:urns error:nil] toString];
     };
 
-    XCTAssertEqualObjects(bound(@[@"media:ext=png;image", @"media:ext=jpeg;image"]), [p(@"media:ext;image") toString]);
+    XCTAssertEqualObjects(bound(@[@"media:ext=png;image", @"media:ext=jpeg;image"]), [p(@"media:ext=jpeg|png;image") toString]);
     // One input already holds the other: the bound is that input, not the wider `ext`.
     XCTAssertEqualObjects(bound(@[@"media:ext=png", @"media:ext!=pdf"]), [p(@"media:ext!=pdf") toString]);
     // A key one input omits says nothing there, so the bound says nothing either.
@@ -1738,13 +1738,15 @@ static NSString *QuotedLiteral(NSString *value) {
     }
 }
 
-// TEST6755: An unquoted value takes any character but ; = " \ and whitespace
+// TEST6755: An unquoted value takes any character but ; = | " \ and whitespace
 - (void)test6755_UnquotedValueTakesAnyNonSeparator {
     CSTaggedUrn *urn = Parse(@"t:k=a,b(c)");
     XCTAssertEqualObjects([urn getTag:@"k"], [CSTagConstraint exact:@"a,b(c)"]);
 
-    CSTaggedUrn *symbols = Parse(@"t:k=x@y#z+%&~'[]{}<>^$|");
-    XCTAssertEqualObjects([symbols getTag:@"k"], [CSTagConstraint exact:@"x@y#z+%&~'[]{}<>^$|"]);
+    CSTaggedUrn *symbols = Parse(@"t:k=x@y#z+%&~'[]{}<>^$");
+    XCTAssertEqualObjects([symbols getTag:@"k"], [CSTagConstraint exact:@"x@y#z+%&~'[]{}<>^$"]);
+    // `|` separates the values of a set.
+    XCTAssertEqualObjects([Parse(@"t:k=a|b") getTag:@"k"], ([CSTagConstraint oneOf:@[@"a", @"b"] orAbsent:NO]));
 
     XCTAssertEqualObjects([Parse(@"t:k=A,B") getTag:@"k"], [CSTagConstraint exact:@"a,b"]);
 
@@ -1809,6 +1811,88 @@ static NSString *QuotedLiteral(NSString *value) {
     before(@"t:x?=a", @"t:x?=b");
     // Writing order is no part of it.
     XCTAssertEqual([Parse(@"t:b;a") compare:Parse(@"t:a;b")], NSOrderedSame);
+}
+
+#pragma mark - Sets of values
+
+// TEST7224: Each set form parses to the set it writes and prints canonically — values once, in increasing order, `!` last — reading back as itself; the qualifier aliases write the same sets
+- (void)test7224_SetFormsParseAndPrint {
+    NSArray<NSArray *> *cases = @[
+        @[@"t:x=b|a", [CSTagConstraint oneOf:@[@"a", @"b"] orAbsent:NO], @"t:x=a|b"],
+        @[@"t:x!=b|a", [CSTagConstraint noneOf:@[@"a", @"b"] orAbsent:NO], @"t:x!=a|b"],
+        @[@"t:x?=b|a", [CSTagConstraint noneOf:@[@"a", @"b"] orAbsent:YES], @"t:x?=a|b"],
+        @[@"t:x=b|!|a", [CSTagConstraint oneOf:@[@"a", @"b"] orAbsent:YES], @"t:x=a|b|!"],
+        @[@"t:x=a|!", [CSTagConstraint oneOf:@[@"a"] orAbsent:YES], @"t:x=a|!"],
+        @[@"t:x=\"a|b\"|c", [CSTagConstraint oneOf:@[@"a|b", @"c"] orAbsent:NO], @"t:x=\"a|b\"|c"],
+        @[@"t:!x=a|b", [CSTagConstraint noneOf:@[@"a", @"b"] orAbsent:NO], @"t:x!=a|b"],
+        @[@"t:?x=a|b", [CSTagConstraint noneOf:@[@"a", @"b"] orAbsent:YES], @"t:x?=a|b"],
+    ];
+    for (NSArray *c in cases) {
+        CSTaggedUrn *urn = Parse(c[0]);
+        XCTAssertEqualObjects([urn getTag:@"x"], c[1], @"%@", c[0]);
+        XCTAssertEqualObjects([urn toString], c[2], @"%@", c[0]);
+        XCTAssertEqualObjects(Parse(c[2]), urn, @"%@", c[2]);
+    }
+    // A set is the model's own value: whether the key may be absent, and its values in order.
+    CSTagConstraint *set = [Parse(@"t:x=b|!|a") getTag:@"x"];
+    XCTAssertEqual(set.kind, CSTagConstraintKindWritten);
+    XCTAssertTrue(set.absent);
+    XCTAssertEqual(set.valuesKind, CSTagValuesKindOneOf);
+    XCTAssertEqualObjects(set.values, (@[@"a", @"b"]));
+    // One value is the single form it always was.
+    XCTAssertEqualObjects([Parse(@"t:x=a") getTag:@"x"], [CSTagConstraint exact:@"a"]);
+}
+
+// TEST7225: A set of values refuses a value given twice, an empty member, a bare sigil or qualifier among its values, and `!` under a qualifier; a literal `|` is quoted
+- (void)test7225_SetFormsRefused {
+    for (NSString *text in @[@"t:x=a|a", @"t:x=a|!|!", @"t:x!=a|a"]) {
+        XCTAssertEqual(ErrorCodeOf(text), CSTaggedUrnErrorDuplicateValue, @"%@", text);
+    }
+    for (NSString *text in @[@"t:x=a|*", @"t:x=a|?", @"t:x=?a|b", @"t:x=a|!b", @"t:x!=a|!", @"t:x?=a|!"]) {
+        XCTAssertEqual(ErrorCodeOf(text), CSTaggedUrnErrorInvalidCharacter, @"%@", text);
+    }
+    for (NSString *text in @[@"t:x=a|", @"t:x=a||b", @"t:x=|a", @"t:x=!|!"]) {
+        XCTAssertNotEqual(ErrorCodeOf(text), 0, @"%@ must be refused", text);
+    }
+    CSTaggedUrn *quoted = Parse(@"t:x=\"a|b\"");
+    XCTAssertEqualObjects([quoted getTag:@"x"], [CSTagConstraint exact:@"a|b"]);
+    XCTAssertEqualObjects([quoted toString], @"t:x=\"a|b\"");
+}
+
+// TEST7226: The bound of several URNs is exact per key: png and jpeg are bound by ext=jpeg|png, a value and its absence by ext=v|!, and a value and any value by ext
+- (void)test7226_BoundIsExactPerKey {
+    NSString *(^bound)(NSArray<NSString *> *) = ^NSString *(NSArray<NSString *> *strings) {
+        NSMutableArray<CSTaggedUrn *> *urns = [NSMutableArray array];
+        for (NSString *s in strings) [urns addObject:Parse(s)];
+        return [[CSTaggedUrn leastUpperBoundWithPrefix:@"media" urns:urns error:nil] toString];
+    };
+    XCTAssertEqualObjects(bound(@[@"media:ext=png", @"media:ext=jpeg"]), @"media:ext=jpeg|png");
+    XCTAssertEqualObjects(bound(@[@"media:ext=png", @"media:!ext"]), @"media:ext=png|!");
+    XCTAssertEqualObjects(bound(@[@"media:ext=png", @"media:ext"]), @"media:ext");
+    XCTAssertEqualObjects(bound(@[@"media:ext=a|b", @"media:ext=b|c"]), @"media:ext=a|b|c");
+    XCTAssertEqualObjects(bound(@[@"media:ext!=a", @"media:ext=a"]), @"media:ext");
+}
+
+// TEST7227: A set scores by what it allows — two or more values 3, absence and some values 1 — and narrowing never lowers a score, though two on one chain can tie
+- (void)test7227_SetScores {
+    XCTAssertEqual([Parse(@"t:x=a|b") specificity], 3);
+    XCTAssertEqual([Parse(@"t:x!=a|b") specificity], 3);
+    XCTAssertEqual([Parse(@"t:x?=a|b") specificity], 1);
+    XCTAssertEqual([Parse(@"t:x=a|!") specificity], 1);
+    XCTAssertEqual([Parse(@"t:x=a|b|c") specificity], 3);
+    XCTAssertGreaterThanOrEqual([Parse(@"t:x=a|b") specificity], [Parse(@"t:x") specificity]);
+
+    NSUInteger absent = 0, exact = 0, presentNot = 0, present = 0, optionalNot = 0;
+    [Parse(@"t:x=a|b;y=a|!;z") specificityTupleMustNotHave:&absent
+                                                       exact:&exact
+                                             presentNotValue:&presentNot
+                                                 mustHaveAny:&present
+                                            absentOrNotValue:&optionalNot];
+    XCTAssertEqual(absent, 0);
+    XCTAssertEqual(exact, 0);
+    XCTAssertEqual(presentNot, 1);
+    XCTAssertEqual(present, 1);
+    XCTAssertEqual(optionalNot, 1);
 }
 
 @end

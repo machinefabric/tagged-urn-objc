@@ -2,7 +2,7 @@
 
 Generated from the test catalogue. Edit the tests, not this file.
 
-109 tests: 109 numbered, 0 unnumbered.
+113 tests: 113 numbered, 0 unnumbered.
 
 ## Numbered
 
@@ -92,7 +92,7 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST82 | tagged-urn/tagged-urn-objc | objc | `test0082_EmptyValueStillError` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1220 | TEST0082: Empty value still error |
 | TEST83 | tagged-urn/tagged-urn-objc | objc | `test0083_ValuelessTagDirectionalAccepts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1234 | TEST0083: Valueless tag directional accepts |
 | TEST84 | tagged-urn/tagged-urn-objc | objc | `test0084_ValuelessNumericKeyStillRejected` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1265 | TEST0084: Valueless numeric key still rejected |
-| TEST392 | tagged-urn/tagged-urn-objc | objc | `test392_leastUpperBound` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1523 | TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as "some value", the coarser of two comparable URNs, nothing for none, and another prefix refused |
+| TEST392 | tagged-urn/tagged-urn-objc | objc | `test392_leastUpperBound` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1523 | TEST392: the bound of several URNs: the values they share, a key every one sets to differing values as the set of those values, the coarser of two comparable URNs, nothing for none, and another prefix refused |
 | TEST578 | tagged-urn/tagged-urn-objc | objc | `test578_equivalentIdenticalTags` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1281 | TEST578: Equivalent URNs with identical tag sets |
 | TEST579 | tagged-urn/tagged-urn-objc | objc | `test579_notEquivalentWhenOneMoreSpecific` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1295 | TEST579: Non-equivalent URNs where one is more specific |
 | TEST580 | tagged-urn/tagged-urn-objc | objc | `test580_comparableSpecializationChain` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1309 | TEST580: Comparable URNs on the same specialization chain |
@@ -112,9 +112,13 @@ Generated from the test catalogue. Edit the tests, not this file.
 | TEST6752 | tagged-urn/tagged-urn-objc | objc | `test6752_QualifierValueAlias` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1656 | TEST6752: An unquoted value that begins with ? or ! is that qualifier (x=?v is x?=v, x=!v is x!=v); a quoted one is literal |
 | TEST6753 | tagged-urn/tagged-urn-objc | objc | `test6753_PrefixAndKeyAreIdentifiers` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1679 | TEST6753: The prefix and every key are identifiers (an ASCII letter, then ASCII letters, digits and -), lowered, in parsing and in every constructor |
 | TEST6754 | tagged-urn/tagged-urn-objc | objc | `test6754_EveryValueReadsBack` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1725 | TEST6754: Every value a URN holds prints so that it reads back as itself |
-| TEST6755 | tagged-urn/tagged-urn-objc | objc | `test6755_UnquotedValueTakesAnyNonSeparator` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1742 | TEST6755: An unquoted value takes any character but ; = " \ and whitespace |
-| TEST6756 | tagged-urn/tagged-urn-objc | objc | `test6756_QuotedValueIsLiteral` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1759 | TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier |
+| TEST6755 | tagged-urn/tagged-urn-objc | objc | `test6755_UnquotedValueTakesAnyNonSeparator` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1742 | TEST6755: An unquoted value takes any character but ; = \| " \ and whitespace |
+| TEST6756 | tagged-urn/tagged-urn-objc | objc | `test6756_QuotedValueIsLiteral` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1761 | TEST6756: A quoted value is the literal value: a quoted *, ? or ! is never a sigil, and a quoted ?=v is never a qualifier |
 | TEST7210 | tagged-urn/tagged-urn-objc | objc | `test7210_admitsAbsenceByForm` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1559 | TEST7210: A written tag lets its key be absent exactly when it is !k, ?k or k?=v; a key the URN does not mention says nothing of it, so it allows absence too |
 | TEST7223 | tagged-urn/tagged-urn-objc | objc | `test7223_urnReadBackFromItsHandle` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1545 | TEST7223: A URN read back from its model handle is the URN: its prefix and every tag, each form and a quoted value included |
-| TEST7241 | tagged-urn/tagged-urn-objc | objc | `test7241_UrnsAreOrderedByTheirParts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1788 | TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value |
+| TEST7224 | tagged-urn/tagged-urn-objc | objc | `test7224_SetFormsParseAndPrint` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1819 | TEST7224: Each set form parses to the set it writes and prints canonically — values once, in increasing order, `!` last — reading back as itself; the qualifier aliases write the same sets |
+| TEST7225 | tagged-urn/tagged-urn-objc | objc | `test7225_SetFormsRefused` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1847 | TEST7225: A set of values refuses a value given twice, an empty member, a bare sigil or qualifier among its values, and `!` under a qualifier; a literal `\|` is quoted |
+| TEST7226 | tagged-urn/tagged-urn-objc | objc | `test7226_BoundIsExactPerKey` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1863 | TEST7226: The bound of several URNs is exact per key: png and jpeg are bound by ext=jpeg\|png, a value and its absence by ext=v\|!, and a value and any value by ext |
+| TEST7227 | tagged-urn/tagged-urn-objc | objc | `test7227_SetScores` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1877 | TEST7227: A set scores by what it allows — two or more values 3, absence and some values 1 — and narrowing never lowers a score, though two on one chain can tie |
+| TEST7241 | tagged-urn/tagged-urn-objc | objc | `test7241_UrnsAreOrderedByTheirParts` | Tests/TaggedUrnTests/CSTaggedUrnTests.m:1790 | TEST7241: URNs are ordered by their parts, never their text: the prefix, then each tag in key order by key, then by its constraint's form (unconstrained, optionalNot, present, presentNot, exact, absent), then by its value |
 

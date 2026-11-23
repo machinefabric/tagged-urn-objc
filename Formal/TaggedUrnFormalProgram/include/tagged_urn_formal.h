@@ -12,39 +12,36 @@ extern "C" {
 void tagged_urn_formal_initialize(void);
 
 /* TaggedUrn.Exec.Wf */
-#define TAGGED_URN_FORMAL_WF_FINGERPRINT "20e9f81ad195b2f4a481e7a5dcae2b3d0de6efe7b3dc720db0e2aa3b52527785"
+#define TAGGED_URN_FORMAL_WF_FINGERPRINT "4fed413de2fb915a7facb2d88381b8a592cbf88ecfc0037e9ed1d5892c5169de"
 lungo_type *tagged_urn_formal_wf_type(void);
 
 /* TaggedUrn.Constraint */
-#define TAGGED_URN_FORMAL_CONSTRAINT_FINGERPRINT "481fc09e23c6415a7c3f05887577ec940a6ecc84b005e63476c1060b59edcac7"
+#define TAGGED_URN_FORMAL_CONSTRAINT_FINGERPRINT "b65d5193904316a2793952f589e3aac63bfc80f801ab20f2693643fcf9894159"
 lungo_type *tagged_urn_formal_constraint_type(void);
 #define TAGGED_URN_FORMAL_CONSTRAINT_MISSING 0
 /* TaggedUrn.Constraint.missing; takes ownership of the fields. */
 lungo_value *tagged_urn_formal_constraint_missing(void);
-#define TAGGED_URN_FORMAL_CONSTRAINT_UNCONSTRAINED 1
-/* TaggedUrn.Constraint.unconstrained; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_unconstrained(void);
-#define TAGGED_URN_FORMAL_CONSTRAINT_OPTIONAL_NOT 2
-/* TaggedUrn.Constraint.optionalNot; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_optional_not(lungo_value *value);
-/* Field value of TaggedUrn.Constraint.optionalNot (borrowed). */
-const lungo_value *tagged_urn_formal_constraint_optional_not_value(const lungo_value *v);
-#define TAGGED_URN_FORMAL_CONSTRAINT_PRESENT 3
-/* TaggedUrn.Constraint.present; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_present(void);
-#define TAGGED_URN_FORMAL_CONSTRAINT_PRESENT_NOT 4
-/* TaggedUrn.Constraint.presentNot; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_present_not(lungo_value *value);
-/* Field value of TaggedUrn.Constraint.presentNot (borrowed). */
-const lungo_value *tagged_urn_formal_constraint_present_not_value(const lungo_value *v);
-#define TAGGED_URN_FORMAL_CONSTRAINT_EXACT 5
-/* TaggedUrn.Constraint.exact; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_exact(lungo_value *value);
-/* Field value of TaggedUrn.Constraint.exact (borrowed). */
-const lungo_value *tagged_urn_formal_constraint_exact_value(const lungo_value *v);
-#define TAGGED_URN_FORMAL_CONSTRAINT_ABSENT 6
-/* TaggedUrn.Constraint.absent; takes ownership of the fields. */
-lungo_value *tagged_urn_formal_constraint_absent(void);
+#define TAGGED_URN_FORMAL_CONSTRAINT_WRITTEN 1
+/* TaggedUrn.Constraint.written; takes ownership of the fields. */
+lungo_value *tagged_urn_formal_constraint_written(lungo_value *absent, lungo_value *values);
+/* Field absent of TaggedUrn.Constraint.written (borrowed). */
+const lungo_value *tagged_urn_formal_constraint_written_absent(const lungo_value *v);
+/* Field values of TaggedUrn.Constraint.written (borrowed). */
+const lungo_value *tagged_urn_formal_constraint_written_values(const lungo_value *v);
+
+/* TaggedUrn.Values */
+#define TAGGED_URN_FORMAL_VALUES_FINGERPRINT "d39e9210a7238d1db8ec7497149536d75384770f7494bb031e64d4e3c61925f6"
+lungo_type *tagged_urn_formal_values_type(void);
+#define TAGGED_URN_FORMAL_VALUES_ONE_OF 0
+/* TaggedUrn.Values.oneOf; takes ownership of the fields. */
+lungo_value *tagged_urn_formal_values_one_of(lungo_value *vs);
+/* Field vs of TaggedUrn.Values.oneOf (borrowed). */
+const lungo_value *tagged_urn_formal_values_one_of_vs(const lungo_value *v);
+#define TAGGED_URN_FORMAL_VALUES_NONE_OF 1
+/* TaggedUrn.Values.noneOf; takes ownership of the fields. */
+lungo_value *tagged_urn_formal_values_none_of(lungo_value *vs);
+/* Field vs of TaggedUrn.Values.noneOf (borrowed). */
+const lungo_value *tagged_urn_formal_values_none_of_vs(const lungo_value *v);
 
 /* TaggedUrn.Exec.comparable : TaggedUrn.Exec.Wf → TaggedUrn.Exec.Wf → Bool */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
@@ -89,6 +86,10 @@ int32_t tagged_urn_formal_refines_closed(const lungo_value *a, const lungo_value
 /* TaggedUrn.Exec.specificity : TaggedUrn.Exec.Wf → Nat */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
 int32_t tagged_urn_formal_specificity(const lungo_value *a, lungo_value **result, lungo_error **error);
+
+/* TaggedUrn.Exec.tagSpecificity : TaggedUrn.Constraint → Nat */
+/* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
+int32_t tagged_urn_formal_tag_specificity(const lungo_value *c, lungo_value **result, lungo_error **error);
 
 /* TaggedUrn.Exec.valuesMatch : TaggedUrn.Constraint → TaggedUrn.Constraint → Bool */
 /* Returns LUNGO_OK with the result, or LUNGO_MALFORMED if the arguments do not match. */
